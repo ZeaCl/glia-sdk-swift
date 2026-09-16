@@ -2,7 +2,7 @@ import SwiftUI
 import GliaSDK
 
 public struct GliaChatView: View {
-    @StateObject private var viewModel: GliaChatViewModel
+    @ObservedObject private var viewModel: GliaChatViewModel
     @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
 
@@ -13,6 +13,7 @@ public struct GliaChatView: View {
     private let theme: GliaTheme
     private let systemPrompt: String?
     private let tools: [GliaToolDefinition]
+    private let disconnectOnDisappear: Bool
     private var pendingPrompt: Binding<String?>?
 
     public init(
@@ -24,9 +25,10 @@ public struct GliaChatView: View {
         theme: GliaTheme = GliaTheme(),
         systemPrompt: String? = nil,
         tools: [GliaToolDefinition] = [],
+        disconnectOnDisappear: Bool = false,
         pendingPrompt: Binding<String?>? = nil
     ) {
-        self._viewModel = StateObject(wrappedValue: viewModel)
+        self.viewModel = viewModel
         self.title = title
         self.welcomeMessage = welcomeMessage
         self.placeholder = placeholder
@@ -34,6 +36,7 @@ public struct GliaChatView: View {
         self.theme = theme
         self.systemPrompt = systemPrompt
         self.tools = tools
+        self.disconnectOnDisappear = disconnectOnDisappear
         self.pendingPrompt = pendingPrompt
     }
 
@@ -70,10 +73,9 @@ public struct GliaChatView: View {
                         }
                     }
                 }
+                // Auto-scroll durante streaming continuo sin animaciones para evitar saturar el Main Thread
                 .onChange(of: viewModel.currentText) { _ in
-                    withAnimation {
-                        proxy.scrollTo("live_streaming_indicator", anchor: .bottom)
-                    }
+                    proxy.scrollTo("live_streaming_indicator", anchor: .bottom)
                 }
             }
 
@@ -99,7 +101,9 @@ public struct GliaChatView: View {
             handlePendingPrompt()
         }
         .onDisappear {
-            viewModel.disconnect()
+            if disconnectOnDisappear {
+                viewModel.disconnect()
+            }
         }
         .onChange(of: pendingPrompt?.wrappedValue) { newValue in
             if let text = newValue, !text.isEmpty {
@@ -115,6 +119,8 @@ public struct GliaChatView: View {
                 Circle()
                     .fill(viewModel.isConnected ? Color.green : Color.orange)
                     .frame(width: 8, height: 8)
+                    .accessibilityLabel("Estado de conexión")
+                    .accessibilityValue(viewModel.isConnected ? "Conectado" : "Desconectado")
                 Text(title)
                     .font(.caption)
                     .fontWeight(.semibold)

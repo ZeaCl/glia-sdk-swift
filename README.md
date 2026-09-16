@@ -6,11 +6,13 @@ Official Swift client SDK and SwiftUI UI components for **Glia** — the high-pe
 
 ## 🚀 Features
 
-- **Protocol Parity:** Built on standard Phoenix Channels v2 (`phx_join`, `run`, heartbeat, exponential reconnect).
+- **Protocol Parity:** Built on standard Phoenix Channels v2 (`phx_join`, `run`, heartbeat, exponential reconnect with backoff).
+- **Strict Concurrency & Type Safety:** 100% Swift 6 Concurrency compliant, actor-isolated `GliaClient`, and strongly typed `JSONValue` eliminating `@unchecked Sendable`.
+- **DIP & Testability:** Decoupled WebSocket transport layer (`WebSocketConnectionProtocol`) enabling deterministic in-memory unit testing.
 - **Cloud & Vendor Agnostic:** Connects to any Glia instance (Docker, AWS, GCP, Bare-Metal, localhost).
 - **Domain & Client Agnostic:** Zero client-specific hardcoding. Fully customizable themes, system prompts, and declarative tools.
 - **Real-Time Streaming:** Sub-second streaming of tokens (`message_delta`), reasoning traces (`thinking_delta`), and tool calls (`tool_call`, `tool_result`).
-- **SwiftUI Ready:** Includes `GliaChatView` with live streaming, collapsible thinking accordion, and dynamic tool status chips.
+- **SwiftUI Ready:** Includes `GliaChatView` with live streaming, smooth auto-scroll, collapsible thinking accordion, accessibility (a11y) support, and dynamic tool status chips.
 
 ---
 
@@ -36,19 +38,33 @@ Or in Xcode: **File > Add Package Dependencies...** and enter `https://github.co
 import GliaSDK
 
 let client = GliaClient(
-    gatewayUrl: "wss://glia.yourdomain.com",
+    gatewayUrl: "https://glia.yourdomain.com", // Automatically normalized to wss://.../socket/websocket
     appId: "your-app-id",
     userId: "user-12345",
     token: "jwt-bearer-token"
 )
 
-// Connect
+// Connect (suspends until phx_join confirms status: "ok")
 try await client.connect()
 
-// Send a prompt with optional dynamic tools
+// Define dynamic tools with strongly typed JSONValue parameters
+let quoteTool = GliaToolDefinition(
+    name: "calculate_quote",
+    description: "Calculates an estimate",
+    parameters: [
+        "type": "object",
+        "properties": [
+            "amount": ["type": "number"]
+        ]
+    ],
+    webhookUrl: "https://api.yourdomain.com/quote"
+)
+
+// Send a prompt with optional system prompt and tools
 try await client.send(
     prompt: "¿Cuál es el balance del fondo?",
-    systemPrompt: "Eres un asistente financiero."
+    systemPrompt: "Eres un asistente financiero.",
+    tools: [quoteTool]
 )
 
 // Observe real-time streaming events
@@ -60,7 +76,7 @@ for await event in events {
     case .messageDelta(let chunk):
         print("Message: \(chunk)")
     case .toolCall(let name, let args):
-        print("Tool: \(name)")
+        print("Tool: \(name) with args: \(args)")
     case .done:
         print("Completed!")
     default:
@@ -79,7 +95,7 @@ import GliaUI
 struct ChatScreen: View {
     @StateObject private var viewModel: GliaChatViewModel
 
-    init(client: GliaClient) {
+    init(client: any GliaClientProtocol) {
         _viewModel = StateObject(wrappedValue: GliaChatViewModel(client: client))
     }
 
@@ -97,10 +113,19 @@ struct ChatScreen: View {
                 primaryColor: Color.blue,
                 userBubbleColor: Color.blue,
                 backgroundColor: Color.black
-            )
+            ),
+            disconnectOnDisappear: false // Preserves connection on modal sheets or navigation
         )
     }
 }
+```
+
+---
+
+## 🧪 Running Tests
+
+```bash
+swift test
 ```
 
 ---

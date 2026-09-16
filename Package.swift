@@ -30,7 +30,7 @@ let package = Package(
         ),
         .testTarget(
             name: "GliaSDKTests",
-            dependencies: ["GliaSDK"],
+            dependencies: ["GliaSDK", "GliaUI"],
             path: "Tests/GliaSDKTests"
         )
     ]

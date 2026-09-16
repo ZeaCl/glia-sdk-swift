@@ -1,0 +1,21 @@
+version: "1.0"
+id: "sdk_security_audit"
+name: "Auditoría de Seguridad y Defensa en Profundidad del SDK Swift"
+description: "Verificación de transporte seguro WSS, sanitización de credenciales y límites de responsabilidad con glia-infra."
+
+stages:
+  - name: "Validación de Transporte Seguro y Normalización de Endpoints"
+    rules:
+      - "enforce_wss_scheme_normalization"
+      - "reject_unencrypted_ws_in_production"
+      - "app_transport_security_compliance"
+  - name: "Frontera de Credenciales y Sanitización"
+    rules:
+      - "no_hardcoded_api_keys_or_bearer_tokens"
+      - "sanitize_bearer_tokens_in_error_traces"
+      - "delegate_keychain_storage_to_host_app"
+  - name: "Swift 6 Concurrency y Gestión de Recursos"
+    rules:
+      - "zero_data_races_actor_isolation"
+      - "leak_free_async_stream_termination"
+      - "clean_disconnection_without_false_errors"

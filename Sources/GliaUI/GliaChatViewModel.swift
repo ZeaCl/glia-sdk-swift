@@ -3,12 +3,12 @@ import Foundation
 import SwiftUI
 import GliaSDK
 
-public enum GliaMessageRole: Sendable {
+public enum GliaMessageRole: String, Codable, Sendable {
     case user
     case assistant
 }
 
-public struct GliaChatMessage: Identifiable, Sendable {
+public struct GliaChatMessage: Identifiable, Sendable, Codable {
     public let id: UUID
     public let role: GliaMessageRole
     public let content: String
@@ -43,12 +43,30 @@ public final class GliaChatViewModel: ObservableObject {
     @Published public private(set) var currentTool: String? = nil
     @Published public private(set) var errorMessage: String? = nil
 
+    public var onMessagesUpdated: (([GliaChatMessage]) -> Void)?
+
     private var lastExecutedTool: String? = nil
     private let client: GliaClientProtocol
     private var eventsTask: Task<Void, Never>?
 
-    public init(client: GliaClientProtocol) {
+    public init(
+        client: GliaClientProtocol,
+        initialMessages: [GliaChatMessage] = [],
+        onMessagesUpdated: (([GliaChatMessage]) -> Void)? = nil
+    ) {
         self.client = client
+        self.messages = initialMessages
+        self.onMessagesUpdated = onMessagesUpdated
+    }
+
+    public func loadMessages(_ newMessages: [GliaChatMessage]) {
+        self.messages = newMessages
+        self.onMessagesUpdated?(newMessages)
+    }
+
+    public func clearMessages() {
+        self.messages = []
+        self.onMessagesUpdated?([])
     }
 
     public func connect() {
@@ -87,6 +105,7 @@ public final class GliaChatViewModel: ObservableObject {
 
         let userMsg = GliaChatMessage(role: .user, content: trimmed)
         messages.append(userMsg)
+        onMessagesUpdated?(messages)
 
         isStreaming = true
         currentThinking = ""
@@ -138,6 +157,7 @@ public final class GliaChatViewModel: ObservableObject {
                     toolName: lastExecutedTool ?? currentTool
                 )
                 messages.append(assistantMsg)
+                onMessagesUpdated?(messages)
             }
             isStreaming = false
             currentThinking = ""

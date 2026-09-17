@@ -176,5 +176,62 @@ final class GliaChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.count, 3) // user1, assistant1, user2
         XCTAssertEqual(mockClient.sentPrompts, ["Primer mensaje", "Tercer mensaje post streaming"])
     }
+
+    func testInitialMessagesAndOnMessagesUpdated() async throws {
+        let initial = [
+            GliaChatMessage(role: .user, content: "Historial previo 1"),
+            GliaChatMessage(role: .assistant, content: "Historial previo 2")
+        ]
+
+        var capturedUpdates: [[GliaChatMessage]] = []
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(
+            client: mockClient,
+            initialMessages: initial,
+            onMessagesUpdated: { updated in
+                capturedUpdates.append(updated)
+            }
+        )
+
+        XCTAssertEqual(viewModel.messages.count, 2)
+        XCTAssertEqual(viewModel.messages[0].content, "Historial previo 1")
+        XCTAssertEqual(viewModel.messages[1].content, "Historial previo 2")
+
+        viewModel.connect()
+        try await waitUntil { viewModel.isConnected }
+
+        viewModel.send(prompt: "Mensaje 3")
+        XCTAssertEqual(viewModel.messages.count, 3)
+        XCTAssertEqual(capturedUpdates.count, 1)
+        XCTAssertEqual(capturedUpdates.last?.count, 3)
+
+        mockClient.emit(.done(fullMessage: "Respuesta 3"))
+        try await waitUntil { !viewModel.isStreaming && viewModel.messages.count == 4 }
+
+        XCTAssertEqual(capturedUpdates.count, 2)
+        XCTAssertEqual(capturedUpdates.last?.count, 4)
+        XCTAssertEqual(capturedUpdates.last?.last?.content, "Respuesta 3")
+    }
+
+    func testGliaChatMessageCodableRoundtrip() throws {
+        let original = [
+            GliaChatMessage(role: .user, content: "Pregunta del usuario"),
+            GliaChatMessage(role: .assistant, content: "Respuesta del bot", thinking: "Pensando...", toolName: "search")
+        ]
+
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        let data = try encoder.encode(original)
+        let decoded = try decoder.decode([GliaChatMessage].self, from: data)
+
+        XCTAssertEqual(decoded.count, 2)
+        XCTAssertEqual(decoded[0].role, .user)
+        XCTAssertEqual(decoded[0].content, "Pregunta del usuario")
+        XCTAssertEqual(decoded[1].role, .assistant)
+        XCTAssertEqual(decoded[1].content, "Respuesta del bot")
+        XCTAssertEqual(decoded[1].thinking, "Pensando...")
+        XCTAssertEqual(decoded[1].toolName, "search")
+    }
 }
 #endif

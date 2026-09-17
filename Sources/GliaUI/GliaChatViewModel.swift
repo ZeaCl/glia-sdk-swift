@@ -1,3 +1,4 @@
+#if canImport(SwiftUI) && canImport(Combine)
 import Foundation
 import SwiftUI
 import GliaSDK
@@ -42,6 +43,7 @@ public final class GliaChatViewModel: ObservableObject {
     @Published public private(set) var currentTool: String? = nil
     @Published public private(set) var errorMessage: String? = nil
 
+    private var lastExecutedTool: String? = nil
     private let client: GliaClientProtocol
     private var eventsTask: Task<Void, Never>?
 
@@ -81,7 +83,7 @@ public final class GliaChatViewModel: ObservableObject {
 
     public func send(prompt: String, systemPrompt: String? = nil, tools: [GliaToolDefinition] = []) {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !isStreaming else { return }
 
         let userMsg = GliaChatMessage(role: .user, content: trimmed)
         messages.append(userMsg)
@@ -90,6 +92,7 @@ public final class GliaChatViewModel: ObservableObject {
         currentThinking = ""
         currentText = ""
         currentTool = nil
+        lastExecutedTool = nil
         errorMessage = nil
 
         Task { [weak self] in
@@ -118,6 +121,7 @@ public final class GliaChatViewModel: ObservableObject {
 
         case .toolCall(let name, _):
             currentTool = name
+            lastExecutedTool = name
 
         case .toolResult(let name, _):
             if currentTool == name {
@@ -131,7 +135,7 @@ public final class GliaChatViewModel: ObservableObject {
                     role: .assistant,
                     content: textToSave,
                     thinking: currentThinking.isEmpty ? nil : currentThinking,
-                    toolName: currentTool
+                    toolName: lastExecutedTool ?? currentTool
                 )
                 messages.append(assistantMsg)
             }
@@ -139,6 +143,7 @@ public final class GliaChatViewModel: ObservableObject {
             currentThinking = ""
             currentText = ""
             currentTool = nil
+            lastExecutedTool = nil
 
         case .error(let err):
             isStreaming = false
@@ -146,3 +151,4 @@ public final class GliaChatViewModel: ObservableObject {
         }
     }
 }
+#endif

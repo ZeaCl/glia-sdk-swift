@@ -1,3 +1,4 @@
+#if canImport(SwiftUI) && canImport(Combine)
 import XCTest
 @testable import GliaSDK
 @testable import GliaUI
@@ -100,4 +101,69 @@ final class GliaChatViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isStreaming)
         XCTAssertEqual(viewModel.errorMessage, "Fallo temporal de API")
     }
+
+    func testToolNamePreservedInAssistantMessageAfterToolResult() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        viewModel.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        viewModel.send(prompt: "Consulta mi saldo")
+        XCTAssertTrue(viewModel.isStreaming)
+
+        // Simular ejecución de tool: toolCall -> toolResult -> done
+        mockClient.emit(.toolCall(name: "check_balance", args: [:]))
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(viewModel.currentTool, "check_balance")
+
+        mockClient.emit(.toolResult(name: "check_balance", result: .string("OK")))
+        try await Task.sleep(nanoseconds: 20_000_000)
+        // currentTool se limpió en toolResult
+        XCTAssertNil(viewModel.currentTool)
+
+        mockClient.emit(.done(fullMessage: "Tu saldo disponible es $150.000 CLP"))
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertFalse(viewModel.isStreaming)
+        XCTAssertEqual(viewModel.messages.count, 2)
+
+        let assistantMessage = viewModel.messages.last
+        XCTAssertEqual(assistantMessage?.role, .assistant)
+        XCTAssertEqual(assistantMessage?.content, "Tu saldo disponible es $150.000 CLP")
+        // Verificar que toolName se preservó a pesar del ciclo de toolResult
+        XCTAssertEqual(assistantMessage?.toolName, "check_balance")
+    }
+
+    func testSendIgnoredWhileStreaming() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        viewModel.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        viewModel.send(prompt: "Primer mensaje")
+        XCTAssertTrue(viewModel.isStreaming)
+        XCTAssertEqual(viewModel.messages.count, 1)
+
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(mockClient.sentPrompts, ["Primer mensaje"])
+
+        // Intentar enviar mientras el stream sigue en curso
+        viewModel.send(prompt: "Segundo mensaje concurrente")
+        XCTAssertEqual(viewModel.messages.count, 1)
+        XCTAssertEqual(mockClient.sentPrompts, ["Primer mensaje"]) // No debe enviarse
+
+        // Finalizar stream
+        mockClient.emit(.done(fullMessage: "Respuesta"))
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertFalse(viewModel.isStreaming)
+
+        // Ahora sí debe permitir enviar
+        viewModel.send(prompt: "Tercer mensaje post streaming")
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(viewModel.messages.count, 3) // user1, assistant1, user2
+        XCTAssertEqual(mockClient.sentPrompts, ["Primer mensaje", "Tercer mensaje post streaming"])
+    }
 }
+#endif

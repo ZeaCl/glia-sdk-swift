@@ -160,19 +160,19 @@ final class GliaClientTests: XCTestCase {
         try await client.connect()
 
         let stream = await client.observeEvents()
-        var eventsReceived: [GliaStreamEvent] = []
-
-        let consumerTask = Task {
+        let consumerTask = Task { () -> [GliaStreamEvent] in
+            var received: [GliaStreamEvent] = []
             for await event in stream {
-                eventsReceived.append(event)
+                received.append(event)
             }
+            return received
         }
 
         // Desconexión voluntaria
         await client.disconnect()
 
         // Esperar a que el loop del consumer finalice
-        _ = await consumerTask.result
+        let eventsReceived = await consumerTask.value
 
         // Debe terminar sin ningún .error emitido
         let hasError = eventsReceived.contains {

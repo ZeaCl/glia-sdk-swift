@@ -43,28 +43,30 @@ public struct GliaToolDefinition: Codable, Sendable, Equatable {
 /// Contenedor genérico para valores Codable dinámicos.
 /// Se recomienda migrar a `JSONValue` para garantizar total seguridad de tipos y concurrencia.
 @available(*, deprecated, message: "Use JSONValue instead for strict type safety and Swift 6 concurrency")
-public struct AnyCodable: Codable, @unchecked Sendable, Equatable {
-    public let value: Any
+public struct AnyCodable: Codable, Sendable, Equatable {
+    private let json: JSONValue
+
+    public var value: Any {
+        json.rawValue
+    }
 
     public init(_ value: Any) {
-        self.value = value
+        self.json = JSONValue.fromAny(value)
     }
 
     public init(from decoder: Decoder) throws {
-        let json = try JSONValue(from: decoder)
-        self.value = json.rawValue
+        self.json = try JSONValue(from: decoder)
     }
 
     public func encode(to encoder: Encoder) throws {
-        let json = JSONValue.fromAny(value)
         try json.encode(to: encoder)
     }
 
     public var toJSONValue: JSONValue {
-        JSONValue.fromAny(value)
+        json
     }
 
     public static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
-        lhs.toJSONValue == rhs.toJSONValue
+        lhs.json == rhs.json
     }
 }

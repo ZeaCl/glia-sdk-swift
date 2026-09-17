@@ -122,10 +122,29 @@ struct ChatScreen: View {
 
 ---
 
-## 🧪 Running Tests
+## 🧪 Running Tests & CI/CD
 
+### Local Unit Tests
 ```bash
 swift test
+```
+
+### Strict Swift 6 Concurrency Check
+```bash
+swift test -Xswiftc -strict-concurrency=complete
+```
+
+### End-to-End Live Integration Tests
+To test against a live Phoenix Channels gateway running on `localhost:4003` (or custom endpoint):
+```bash
+GLIA_LIVE_TEST=1 GLIA_LIVE_URL="ws://localhost:4003" swift test --filter GliaLiveIntegrationTests
+```
+
+### Google Cloud Build & Microglia Security Audit
+This repository contains [`cloudbuild.yaml`](cloudbuild.yaml) aligned with ZEA GCP standards (`southamerica-west1`):
+```bash
+# Run security audit locally with Microglia
+microglia scan . --details
 ```
 
 ---

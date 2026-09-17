@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// Configuración visual y de tema completamente agnóstica para GliaChatView
@@ -49,3 +50,4 @@ public struct GliaTheme: Sendable {
         self.errorColor = errorColor
     }
 }
+#endif

@@ -41,11 +41,15 @@ public enum GliaError: Error, LocalizedError, Sendable, Equatable {
 /// Contenedor de valores dinámicos seguro para concurrencia (`Sendable`).
 /// Se recomienda migrar a `JSONValue` para estricta seguridad en tiempo de compilación.
 @available(*, deprecated, message: "Use JSONValue instead for strict type and concurrency safety")
-public struct AnySendable: @unchecked Sendable {
-    public let value: Any
+public struct AnySendable: Sendable {
+    private let json: JSONValue
+
+    public var value: Any {
+        json.rawValue
+    }
 
     public init(_ value: Any) {
-        self.value = value
+        self.json = JSONValue.fromAny(value)
     }
 }
 

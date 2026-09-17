@@ -29,6 +29,7 @@ public actor GliaClient: GliaClientProtocol {
     private var isVoluntaryDisconnect: Bool = false
     private var messageRef: Int = 1
     private var heartbeatTask: Task<Void, Never>?
+    private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempts: Int = 0
 
@@ -145,6 +146,9 @@ public actor GliaClient: GliaClientProtocol {
     }
 
     private func cancelInternalConnection() {
+        receiveTask?.cancel()
+        receiveTask = nil
+
         heartbeatTask?.cancel()
         heartbeatTask = nil
 
@@ -272,13 +276,15 @@ public actor GliaClient: GliaClientProtocol {
 
     // MARK: - Receive Loop
     private func startReceiveLoop(for conn: any WebSocketConnectionProtocol) {
-        Task { [weak self] in
+        receiveTask?.cancel()
+        receiveTask = Task { [weak self] in
             while let self = self {
                 let isConnected = await self.isConnectedInternal
-                guard isConnected else { break }
+                guard isConnected, !Task.isCancelled else { break }
 
                 do {
                     let message = try await conn.receive()
+                    guard !Task.isCancelled else { break }
                     switch message {
                     case .string(let text):
                         await self.handleIncomingMessage(text)
@@ -289,7 +295,7 @@ public actor GliaClient: GliaClientProtocol {
                     }
                 } catch {
                     let voluntary = await self.isVoluntaryDisconnect
-                    if voluntary {
+                    if voluntary || Task.isCancelled {
                         // Desconexión intencional por client.disconnect(): salir silenciosamente
                         break
                     }
@@ -385,7 +391,7 @@ public actor GliaClient: GliaClientProtocol {
             }
 
         case "done":
-            let fullMsg = frame.payload["full_message"]?.stringValue
+            let fullMsg = frame.payload["text"]?.stringValue ?? frame.payload["full_message"]?.stringValue
             broadcast(.done(fullMessage: fullMsg))
 
         case "error":

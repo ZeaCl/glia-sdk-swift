@@ -1,3 +1,4 @@
+#if canImport(SwiftUI) && canImport(Combine)
 import SwiftUI
 import GliaSDK
 
@@ -326,3 +327,4 @@ public struct GliaChatView: View {
         }
     }
 }
+#endif

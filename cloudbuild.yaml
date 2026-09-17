@@ -20,7 +20,7 @@ steps:
 substitutions:
   _REGION: southamerica-west1
   _SWIFT_IMAGE: 'swift:6.0-noble'
-  _MICROGLIA_IMAGE: '${_REGION}-docker.pkg.dev/${PROJECT_ID}/zea/microglia:latest'
+  _MICROGLIA_IMAGE: 'southamerica-west1-docker.pkg.dev/${PROJECT_ID}/zea/microglia:latest'
 
 options:
   machineType: 'E2_HIGHCPU_8'

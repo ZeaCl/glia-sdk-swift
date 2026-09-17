@@ -35,36 +35,37 @@ final class GliaLiveIntegrationTests: XCTestCase {
         // 3. Enviar prompt
         try await client.send(prompt: "Hola desde test E2E de Swift SDK")
 
-        var receivedDone = false
-        var deltasCount = 0
+        let streamTask = Task { () -> (done: Bool, deltas: Int, error: String?) in
+            var deltas = 0
+            for await event in stream {
+                guard !Task.isCancelled else { break }
+                switch event {
+                case .messageDelta, .thinkingDelta:
+                    deltas += 1
+                case .done:
+                    return (done: true, deltas: deltas, error: nil)
+                case .error(let msg):
+                    return (done: false, deltas: deltas, error: msg)
+                default:
+                    break
+                }
+            }
+            return (done: false, deltas: deltas, error: Task.isCancelled ? "Timeout: no se recibió evento done en 15 segundos" : "Stream finalizó prematuramente")
+        }
 
         let timeoutTask = Task {
-            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 segundos timeout E2E
+            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15s timeout
+            streamTask.cancel()
         }
 
-        for await event in stream {
-            switch event {
-            case .messageDelta, .thinkingDelta:
-                deltasCount += 1
-            case .done:
-                receivedDone = true
-                break
-            case .error(let msg):
-                XCTFail("Se recibió error inesperado del gateway en vivo: \(msg)")
-                break
-            default:
-                break
-            }
-
-            if receivedDone {
-                break
-            }
-        }
-
+        let result = await streamTask.value
         timeoutTask.cancel()
 
-        XCTAssertTrue(receivedDone, "Debe completarse el turno con evento done")
-        XCTAssertGreaterThan(deltasCount, 0, "Debe haberse recibido al menos un chunk/delta de respuesta")
+        if let error = result.error {
+            XCTFail("Fallo en stream en vivo: \(error)")
+        }
+        XCTAssertTrue(result.done, "Debe completarse el turno con evento done")
+        XCTAssertGreaterThan(result.deltas, 0, "Debe haberse recibido al menos un chunk/delta de respuesta")
 
         // 4. Desconexión voluntaria limpia
         await client.disconnect()

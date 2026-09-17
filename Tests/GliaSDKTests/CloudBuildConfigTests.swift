@@ -2,8 +2,8 @@ import XCTest
 
 final class CloudBuildConfigTests: XCTestCase {
     func testCloudBuildFileExistsAndValidatesStandards() throws {
-        // Encontrar ruta relativa a Package.swift
-        let currentFileURL = URL(fileURLWithPath: #file)
+        // Encontrar ruta relativa a Package.swift usando #filePath (Swift 6 compatible)
+        let currentFileURL = URL(fileURLWithPath: #filePath)
         let rootURL = currentFileURL
             .deletingLastPathComponent() // GliaSDKTests
             .deletingLastPathComponent() // Tests

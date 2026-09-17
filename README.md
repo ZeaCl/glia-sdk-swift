@@ -2,6 +2,8 @@
 
 Official Swift client SDK and SwiftUI UI components for **Glia** — the high-performance, cloud-agnostic agent runtime built on Phoenix Channels WebSockets.
 
+📖 **[Read the Full Integration Guide (Guía de Integración)](docs/INTEGRATION_GUIDE.md)** for detailed step-by-step setup in iOS and macOS apps.
+
 ---
 
 ## 🚀 Features

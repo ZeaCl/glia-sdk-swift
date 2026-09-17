@@ -1,0 +1,69 @@
+# =============================================================================
+# ZEA Microglia — Declarative Security Profile for Glia Swift SDK
+# Tailored for Client SDK interacting with ZEA Glia Infrastructure (glia-infra)
+# =============================================================================
+version: "1.0"
+domain: "ai_runtime"
+
+profile:
+  id: "glia_sdk_swift"
+  name: "Glia Swift Client SDK Security Profile"
+  description: "Swift client SDK and SwiftUI components connecting to ZEA Glia AI Agent Runtime gateway."
+  target_artifact: "spm/GliaSDK"
+  type: "sdk_swift"
+  platform: "apple_swift"
+
+topology:
+  client_component: "ZeaCl/glia-sdk-swift"
+  runtime_infrastructure: "ZeaCl/glia-infra"
+  auth_authority: "ZeaCl/thalamus"
+  gateway_endpoints:
+    websocket_protocol: "phoenix_channels_v2"
+    default_ports:
+      - 443
+      - 4003
+
+layers:
+  client_transport:
+    enforce_tls_wss: true
+    allow_cleartext_ws_only_on_loopback: true
+    app_transport_security_compliant: true
+    url_normalization_enforced: true
+    vsn_version_fixed: "2.0.0"
+
+  credential_boundary:
+    forbid_hardcoded_secrets: true
+    delegate_token_storage_to_host_keychain: true
+    sanitize_tokens_in_error_logs: true
+    sanitize_reasoning_traces_in_telemetry: true
+
+  concurrency_and_lifecycle:
+    strict_concurrency_mode: "swift_6"
+    actor_isolated_client: true
+    memory_leak_free_streams: true
+    exponential_backoff_reconnect:
+      enabled: true
+      max_reconnect_attempts: 5
+      initial_delay_sec: 1.0
+      max_delay_sec: 30.0
+
+  infrastructure_delegation:
+    note: "Security responsibilities delegated to ZeaCl/glia-infra"
+    llm_api_keys_storage: "managed_by_glia_infra_environment"
+    jwks_jwt_signature_verification: "managed_by_glia_runtime_thalamus_jwks"
+    tenant_database_isolation: "managed_by_glia_infra_postgresql_silo"
+    edge_firewall_and_rate_limiting: "managed_by_glia_infra_network_tf"
+
+compliance:
+  frameworks:
+    - "OWASP_MASVS_L2"
+    - "OWASP_API_TOP_10"
+    - "LEY_21719_APDP"
+    - "LEY_21663_ANCI"
+
+rules:
+  - "Transport Security: Enforce WSS/TLS 1.3 connection to glia-infra gateway"
+  - "Credential Boundary: Host applications provide bearer tokens; SDK never hardcodes secrets"
+  - "Infrastructure Boundary: Glia-infra manages Gemini API keys, PostgreSQL silos, and JWKS token verification"
+  - "DoS Prevention: Exponential backoff with ceiling prevents reconnection storms against tenant port 4003"
+  - "Memory Safety: Guaranteed AsyncStream and task cancellation upon client disconnection"

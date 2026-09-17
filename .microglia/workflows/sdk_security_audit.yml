@@ -1,0 +1,29 @@
+version: "1.0"
+id: "sdk_security_audit"
+name: "Auditoría de Seguridad y Calidad del SDK Swift"
+description: "Verificación de suite de tests, transporte seguro WSS y ausencia de secretos embebidos."
+
+stages:
+  - name: "Compilación y Tests Unitarios"
+    steps:
+      - id: "tests"
+        name: "Ejecutar Swift Test Suite"
+        run: "swift test"
+  - name: "Validación de Transporte Seguro (WSS)"
+    steps:
+      - id: "enforce_wss"
+        name: "Prohibir endpoints HTTP inseguros en código de producción"
+        pattern_scan:
+          paths: ["Sources/**/*.swift"]
+          exclude: ["Tests/**"]
+          forbid_regex: '["'']http://'
+          message: "Endpoints HTTP no cifrados detectados en código fuente"
+  - name: "Inspección de Secretos y API Keys"
+    steps:
+      - id: "no_secrets"
+        name: "Prohibir llaves maestras o API keys hardcodeadas"
+        pattern_scan:
+          paths: ["Sources/**/*.swift"]
+          exclude: ["Tests/**"]
+          forbid_regex: '(?i)(api[_-]?key|secret[_-]?key)\s*[:=]\s*["''][A-Za-z0-9_\-]{20,}["'']'
+          message: "Posible API Key o secreto embebido detectado"

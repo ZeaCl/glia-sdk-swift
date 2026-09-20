@@ -1,5 +1,83 @@
+# =============================================================================
+# Glia Swift Client SDK — .gitignore
+# =============================================================================
+
+### --- Swift Package Manager & Xcode Specifics ---
 .build/
 .swiftpm/
-*.xcodeproj
-.DS_Store
+Packages/
+Package.pins
+
+# Xcode project & user data
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+*.xcuserdatad
+xcuserdata/
+DerivedData/
+
+# Binary & Testing Artifacts
+*.xctest
+*.ipa
+*.dSYM/
+*.dSYM.zip
+
+# Dependency managers (if integrated into host apps)
+Pods/
+Carthage/Build/
+
+### --- Common: Environment & Secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+
+### --- Common: Internal Tools & Audits ---
 .microglia/
+
+### --- Common: Editors & IDEs ---
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains / AppCode
+.idea/
+*.iml
+
+# Temporary & Swap Files
+*.swp
+*.swo
+*~
+*.bak
+
+### --- Common: Operating Systems ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+
+# Linux
+*~
+
+### --- Common: Logs & Test Reports ---
+*.log
+reports/
+test-results/

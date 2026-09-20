@@ -1,9 +1,0 @@
-{
-  "version": "4.0",
-  "workflow_id": "sdk_security_audit",
-  "git_commit": "56ebd0de808a190c55e800837cea506e4856bd13",
-  "timestamp": "2026-09-17T14:49:20.256587+00:00",
-  "report_sha256": "6294eee031bf2222c782546ba7268cab4496fbc91f643570c1b8e1442481b24a",
-  "public_key_hex": "b7541aa427e08cf80257377e12f563fe3e4f74a4ebc19c2bdde3321c11d27822",
-  "signature_hex": "0407446c49a88dc603fa14ffd06a8a54c058f43ebfcc2bd6967a89624b496490adf451d8445d0df5197b514dd12fb67bac4eb0d5831508d0d25a2eb0cc8f8702"
-}

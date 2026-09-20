@@ -1,7 +1,7 @@
 import Foundation
 
-/// Representación estructurada de un frame en el protocolo Phoenix Channels v2.
-/// Formato de array: `[join_ref, ref, topic, event, payload]`
+/// Structured representation of a frame in the Phoenix Channels v2 protocol.
+/// Array format: `[join_ref, ref, topic, event, payload]`
 public struct PhoenixFrame: Sendable, Equatable {
     public let joinRef: String?
     public let ref: String?
@@ -23,7 +23,7 @@ public struct PhoenixFrame: Sendable, Equatable {
         self.payload = payload
     }
 
-    /// Parsea un texto JSON que representa un frame de Phoenix v2.
+    /// Parses JSON text representing a Phoenix v2 frame.
     public static func parse(from text: String) -> PhoenixFrame? {
         guard let data = text.data(using: .utf8),
               let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [Any],
@@ -49,7 +49,7 @@ public struct PhoenixFrame: Sendable, Equatable {
         )
     }
 
-    /// Serializa el frame en formato JSON array para enviarlo por WebSocket.
+    /// Serializes the frame into JSON array format for WebSocket transmission.
     public func serialize() throws -> String {
         let rawJoinRef: Any = joinRef ?? NSNull()
         let rawRef: Any = ref ?? NSNull()
@@ -66,7 +66,7 @@ public struct PhoenixFrame: Sendable, Equatable {
         let data = try JSONSerialization.data(withJSONObject: array)
         guard let str = String(data: data, encoding: .utf8) else {
             throw DecodingError.dataCorrupted(
-                DecodingError.Context(codingPath: [], debugDescription: "No se pudo codificar PhoenixFrame como UTF-8")
+                DecodingError.Context(codingPath: [], debugDescription: "Could not encode PhoenixFrame as UTF-8")
             )
         }
         return str

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Eventos emitidos en tiempo real por el runtime de Glia a través de WebSocket
+/// Real-time streaming events emitted by the Glia runtime via WebSocket
 public enum GliaStreamEvent: Sendable, Equatable {
     case status(String)
     case thinkingDelta(String)
@@ -11,7 +11,7 @@ public enum GliaStreamEvent: Sendable, Equatable {
     case error(String)
 }
 
-/// Errores tipados emitidos por el SDK de Glia
+/// Typed errors emitted by the Glia SDK
 public enum GliaError: Error, LocalizedError, Sendable, Equatable {
     case invalidURL(String)
     case joinFailed(reason: String)
@@ -23,23 +23,23 @@ public enum GliaError: Error, LocalizedError, Sendable, Equatable {
     public var errorDescription: String? {
         switch self {
         case .invalidURL(let url):
-            return "URL inválida del gateway de Glia: \(url)"
+            return "Invalid Glia gateway URL: \(url)"
         case .joinFailed(let reason):
-            return "No se pudo unir al canal de Phoenix: \(reason)"
+            return "Failed to join Phoenix channel: \(reason)"
         case .connectionTimeout:
-            return "Tiempo de espera agotado al conectar o unir canal"
+            return "Connection or channel join timed out"
         case .notConnected:
-            return "No hay una conexión activa con el gateway de Glia"
+            return "No active connection to the Glia gateway"
         case .connectionClosed(let reason):
-            return "Conexión cerrada: \(reason)"
+            return "Connection closed: \(reason)"
         case .serverError(let msg):
-            return "Error del servidor: \(msg)"
+            return "Server error: \(msg)"
         }
     }
 }
 
-/// Contenedor de valores dinámicos seguro para concurrencia (`Sendable`).
-/// Se recomienda migrar a `JSONValue` para estricta seguridad en tiempo de compilación.
+/// Concurrency-safe container for dynamic values (`Sendable`).
+/// Recommended to migrate to `JSONValue` for strict compile-time safety.
 @available(*, deprecated, message: "Use JSONValue instead for strict type and concurrency safety")
 public struct AnySendable: Sendable {
     private let json: JSONValue
@@ -53,7 +53,7 @@ public struct AnySendable: Sendable {
     }
 }
 
-/// Opciones de configuración para inicializar GliaClient
+/// Configuration options to initialize GliaClient
 public struct GliaOptions: Sendable, Equatable {
     public let gatewayUrl: String
     public let appId: String

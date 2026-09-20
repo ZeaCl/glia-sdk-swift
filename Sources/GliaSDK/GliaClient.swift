@@ -132,15 +132,15 @@ public actor GliaClient: GliaClientProtocol {
 
         cancelInternalConnection()
 
-        // Terminar streams de eventos para evitar fugas de memoria (AsyncStream leak fix)
+        // Finish event streams to avoid memory leaks (AsyncStream leak fix)
         for cont in continuations.values {
             cont.finish()
         }
         continuations.removeAll()
 
-        // Cancelar continuations pendientes de phx_reply
+        // Cancel pending phx_reply continuations
         for reply in pendingReplies.values {
-            reply.resume(throwing: GliaError.connectionClosed("Desconexión voluntaria"))
+            reply.resume(throwing: GliaError.connectionClosed("Voluntary disconnection"))
         }
         pendingReplies.removeAll()
     }
@@ -179,7 +179,7 @@ public actor GliaClient: GliaClientProtocol {
         let text = try frame.serialize()
         try await conn.send(.string(text))
 
-        // Esperar sincrónicamente la confirmación phx_reply con timeout
+        // Synchronously wait for phx_reply confirmation with timeout
         let timeoutSeconds = options.timeout
         let timeoutTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
@@ -296,7 +296,7 @@ public actor GliaClient: GliaClientProtocol {
                 } catch {
                     let voluntary = await self.isVoluntaryDisconnect
                     if voluntary || Task.isCancelled {
-                        // Desconexión intencional por client.disconnect(): salir silenciosamente
+                        // Intentional disconnect by client.disconnect(): exit silently
                         break
                     }
 
@@ -311,13 +311,13 @@ public actor GliaClient: GliaClientProtocol {
         cancelInternalConnection()
         broadcast(.error("WebSocket error: \(error.localizedDescription)"))
 
-        // Cancelar continuations pendientes si el socket cayó
+        // Cancel pending continuations if socket dropped
         for reply in pendingReplies.values {
             reply.resume(throwing: GliaError.connectionClosed(error.localizedDescription))
         }
         pendingReplies.removeAll()
 
-        // Reconexión exponencial automática
+        // Automatic exponential reconnection
         if options.autoReconnect && reconnectAttempts < options.maxReconnectAttempts {
             scheduleReconnect()
         }
@@ -338,7 +338,7 @@ public actor GliaClient: GliaClientProtocol {
             do {
                 try await self.connect()
             } catch {
-                // Si falla, el receiveLoop o el catch reintentará según maxReconnectAttempts
+                // If it fails, receiveLoop or catch will retry up to maxReconnectAttempts
             }
         }
     }

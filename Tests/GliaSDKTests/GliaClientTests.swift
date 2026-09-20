@@ -89,9 +89,9 @@ final class GliaClientTests: XCTestCase {
             connectionFactory: { _, _ in mockConn }
         )
 
-        // Simular respuesta del servidor phx_reply cuando llegue el join frame
+        // Simulate server phx_reply response when join frame arrives
         Task {
-            // Esperar brevemente a que connect() envíe el join frame
+            // Briefly wait for connect() to send join frame
             try await Task.sleep(nanoseconds: 50_000_000)
             let replyJson = "[\"1\",\"1\",\"session:app1:usr1\",\"phx_reply\",{\"status\":\"ok\",\"response\":{}}]"
             mockConn.pushIncoming(text: replyJson)
@@ -119,7 +119,7 @@ final class GliaClientTests: XCTestCase {
             connectionFactory: { _, _ in mockConn }
         )
 
-        // Simular rechazo de join por token inválido
+        // Simulate join rejection due to invalid token
         Task {
             try await Task.sleep(nanoseconds: 50_000_000)
             let replyJson = "[\"1\",\"1\",\"session:app1:usr1\",\"phx_reply\",{\"status\":\"error\",\"response\":{\"reason\":\"unauthorized\"}}]"
@@ -128,7 +128,7 @@ final class GliaClientTests: XCTestCase {
 
         do {
             try await client.connect()
-            XCTFail("Debió fallar con GliaError.joinFailed")
+            XCTFail("Should have failed with GliaError.joinFailed")
         } catch let error as GliaError {
             XCTAssertEqual(error, GliaError.joinFailed(reason: "unauthorized"))
         }
@@ -168,13 +168,13 @@ final class GliaClientTests: XCTestCase {
             return received
         }
 
-        // Desconexión voluntaria
+        // Voluntary disconnect
         await client.disconnect()
 
-        // Esperar a que el loop del consumer finalice
+        // Wait for consumer loop to finish
         let eventsReceived = await consumerTask.value
 
-        // Debe terminar sin ningún .error emitido
+        // Must terminate without any .error emitted
         let hasError = eventsReceived.contains {
             if case .error = $0 { return true }
             return false
@@ -207,13 +207,13 @@ final class GliaClientTests: XCTestCase {
 
         let stream = await client.observeEvents()
 
-        // Inyectar eventos de streaming
-        mockConn.pushIncoming(text: "[null,\"2\",\"session:app1:usr1\",\"thinking_delta\",{\"content\":\"Analizando...\"}]")
-        mockConn.pushIncoming(text: "[null,\"3\",\"session:app1:usr1\",\"message_delta\",{\"content\":\"Hola \"}]")
-        mockConn.pushIncoming(text: "[null,\"4\",\"session:app1:usr1\",\"message_delta\",{\"content\":\"mundo\"}]")
+        // Inject streaming events
+        mockConn.pushIncoming(text: "[null,\"2\",\"session:app1:usr1\",\"thinking_delta\",{\"content\":\"Analyzing...\"}]")
+        mockConn.pushIncoming(text: "[null,\"3\",\"session:app1:usr1\",\"message_delta\",{\"content\":\"Hello \"}]")
+        mockConn.pushIncoming(text: "[null,\"4\",\"session:app1:usr1\",\"message_delta\",{\"content\":\"world\"}]")
         mockConn.pushIncoming(text: "[null,\"5\",\"session:app1:usr1\",\"tool_call\",{\"name\":\"search\",\"args\":{\"query\":\"swift\"}}]")
         mockConn.pushIncoming(text: "[null,\"6\",\"session:app1:usr1\",\"tool_result\",{\"name\":\"search\",\"result\":\"ok\"}]")
-        mockConn.pushIncoming(text: "[null,\"7\",\"session:app1:usr1\",\"done\",{\"full_message\":\"Hola mundo\"}]")
+        mockConn.pushIncoming(text: "[null,\"7\",\"session:app1:usr1\",\"done\",{\"full_message\":\"Hello world\"}]")
 
         var received: [GliaStreamEvent] = []
         for await event in stream {
@@ -224,12 +224,12 @@ final class GliaClientTests: XCTestCase {
         }
 
         XCTAssertEqual(received.count, 6)
-        XCTAssertEqual(received[0], .thinkingDelta("Analizando..."))
-        XCTAssertEqual(received[1], .messageDelta("Hola "))
-        XCTAssertEqual(received[2], .messageDelta("mundo"))
+        XCTAssertEqual(received[0], .thinkingDelta("Analyzing..."))
+        XCTAssertEqual(received[1], .messageDelta("Hello "))
+        XCTAssertEqual(received[2], .messageDelta("world"))
         XCTAssertEqual(received[3], .toolCall(name: "search", args: ["query": "swift"]))
         XCTAssertEqual(received[4], .toolResult(name: "search", result: "ok"))
-        XCTAssertEqual(received[5], .done(fullMessage: "Hola mundo"))
+        XCTAssertEqual(received[5], .done(fullMessage: "Hello world"))
 
         await client.disconnect()
     }
@@ -252,13 +252,13 @@ final class GliaClientTests: XCTestCase {
         try await client.connect()
         let stream = await client.observeEvents()
 
-        // Elixir GliaWeb.SessionChannel.ex emite: {:done, response} -> push(socket, "done", %{text: response})
-        let doneFrame = "[null,\"2\",\"session:app1:usr1\",\"done\",{\"text\":\"Respuesta desde backend Elixir\"}]"
+        // Backend emits: {:done, response} -> push(socket, "done", %{text: response})
+        let doneFrame = "[null,\"2\",\"session:app1:usr1\",\"done\",{\"text\":\"Response from backend\"}]"
         mockConn.pushIncoming(text: doneFrame)
 
         for await event in stream {
             if case .done(let fullMessage) = event {
-                XCTAssertEqual(fullMessage, "Respuesta desde backend Elixir")
+                XCTAssertEqual(fullMessage, "Response from backend")
                 break
             }
         }
@@ -284,12 +284,12 @@ final class GliaClientTests: XCTestCase {
         try await client.connect()
         let stream = await client.observeEvents()
 
-        let doneFrame = "[null,\"2\",\"session:app1:usr1\",\"done\",{\"full_message\":\"Respuesta legacy\"}]"
+        let doneFrame = "[null,\"2\",\"session:app1:usr1\",\"done\",{\"full_message\":\"Legacy response\"}]"
         mockConn.pushIncoming(text: doneFrame)
 
         for await event in stream {
             if case .done(let fullMessage) = event {
-                XCTAssertEqual(fullMessage, "Respuesta legacy")
+                XCTAssertEqual(fullMessage, "Legacy response")
                 break
             }
         }

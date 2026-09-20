@@ -1,6 +1,6 @@
 import Foundation
 
-/// Definición declarativa de una herramienta (Tool) enviada al agente Glia
+/// Declarative definition of a dynamic tool sent to the Glia agent
 public struct GliaToolDefinition: Codable, Sendable, Equatable {
     public let name: String
     public let description: String
@@ -40,8 +40,8 @@ public struct GliaToolDefinition: Codable, Sendable, Equatable {
     }
 }
 
-/// Contenedor genérico para valores Codable dinámicos.
-/// Se recomienda migrar a `JSONValue` para garantizar total seguridad de tipos y concurrencia.
+/// Generic container for dynamic Codable values.
+/// Recommended to migrate to `JSONValue` for full type safety and concurrency.
 @available(*, deprecated, message: "Use JSONValue instead for strict type safety and Swift 6 concurrency")
 public struct AnyCodable: Codable, Sendable, Equatable {
     private let json: JSONValue

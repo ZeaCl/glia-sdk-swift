@@ -3,9 +3,9 @@ import XCTest
 
 final class GliaLiveIntegrationTests: XCTestCase {
     func testLiveGatewayStreamingConnection() async throws {
-        // Ejecutar solo si GLIA_LIVE_TEST=1 está presente en el entorno
+        // Run only if GLIA_LIVE_TEST=1 is present in the environment
         guard ProcessInfo.processInfo.environment["GLIA_LIVE_TEST"] == "1" else {
-            throw XCTSkip("GLIA_LIVE_TEST=1 no está configurado. Omitiendo prueba E2E en vivo contra backend Phoenix Channels.")
+            throw XCTSkip("GLIA_LIVE_TEST=1 is not configured. Skipping live E2E test against Phoenix Channels backend.")
         }
 
         let gatewayUrl = ProcessInfo.processInfo.environment["GLIA_LIVE_URL"] ?? "ws://localhost:4003"
@@ -24,16 +24,16 @@ final class GliaLiveIntegrationTests: XCTestCase {
 
         let client = GliaClient(options: options)
 
-        // 1. Conexión y phx_join sincrónico
+        // 1. Synchronous connection and phx_join
         try await client.connect()
         let isConnected = await client.isConnected
-        XCTAssertTrue(isConnected, "El cliente debe confirmar conexión y handshake phx_join exitoso")
+        XCTAssertTrue(isConnected, "The client must confirm connection and successful phx_join handshake")
 
-        // 2. Observar stream de eventos
+        // 2. Observe stream events
         let stream = await client.observeEvents()
 
-        // 3. Enviar prompt
-        try await client.send(prompt: "Hola desde test E2E de Swift SDK")
+        // 3. Send prompt
+        try await client.send(prompt: "Hello from Swift SDK E2E test")
 
         let streamTask = Task { () -> (done: Bool, deltas: Int, error: String?) in
             var deltas = 0
@@ -50,7 +50,7 @@ final class GliaLiveIntegrationTests: XCTestCase {
                     break
                 }
             }
-            return (done: false, deltas: deltas, error: Task.isCancelled ? "Timeout: no se recibió evento done en 15 segundos" : "Stream finalizó prematuramente")
+            return (done: false, deltas: deltas, error: Task.isCancelled ? "Timeout: no done event received within 15 seconds" : "Stream terminated prematurely")
         }
 
         let timeoutTask = Task {
@@ -62,14 +62,14 @@ final class GliaLiveIntegrationTests: XCTestCase {
         timeoutTask.cancel()
 
         if let error = result.error {
-            XCTFail("Fallo en stream en vivo: \(error)")
+            XCTFail("Live stream failure: \(error)")
         }
-        XCTAssertTrue(result.done, "Debe completarse el turno con evento done")
-        XCTAssertGreaterThan(result.deltas, 0, "Debe haberse recibido al menos un chunk/delta de respuesta")
+        XCTAssertTrue(result.done, "Turn must complete with done event")
+        XCTAssertGreaterThan(result.deltas, 0, "At least one response chunk/delta must be received")
 
-        // 4. Desconexión voluntaria limpia
+        // 4. Clean voluntary disconnect
         await client.disconnect()
         let finalConnected = await client.isConnected
-        XCTAssertFalse(finalConnected, "El cliente debe reflejar desconexión limpia")
+        XCTAssertFalse(finalConnected, "The client must reflect a clean disconnect")
     }
 }

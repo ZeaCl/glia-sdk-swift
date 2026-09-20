@@ -19,9 +19,9 @@ public struct GliaChatView: View {
 
     public init(
         viewModel: GliaChatViewModel,
-        title: String? = "Asistente AI",
-        welcomeMessage: String = "¡Hola! ¿En qué te puedo ayudar hoy?",
-        placeholder: String = "Escribe un mensaje...",
+        title: String? = "AI Assistant",
+        welcomeMessage: String = "Hello! How can I help you today?",
+        placeholder: String = "Type a message...",
         suggestedPrompts: [String] = [],
         theme: GliaTheme = GliaTheme(),
         systemPrompt: String? = nil,
@@ -74,7 +74,7 @@ public struct GliaChatView: View {
                         }
                     }
                 }
-                // Auto-scroll durante streaming continuo sin animaciones para evitar saturar el Main Thread
+                // Auto-scroll during continuous streaming without animations to prevent saturating the Main Thread
                 .onChange(of: viewModel.currentText) { _ in
                     proxy.scrollTo("live_streaming_indicator", anchor: .bottom)
                 }
@@ -120,8 +120,8 @@ public struct GliaChatView: View {
                 Circle()
                     .fill(viewModel.isConnected ? Color.green : Color.orange)
                     .frame(width: 8, height: 8)
-                    .accessibilityLabel("Estado de conexión")
-                    .accessibilityValue(viewModel.isConnected ? "Conectado" : "Desconectado")
+                    .accessibilityLabel("Connection status")
+                    .accessibilityValue(viewModel.isConnected ? "Connected" : "Disconnected")
                 Text(title)
                     .font(.caption)
                     .fontWeight(.semibold)
@@ -144,7 +144,7 @@ public struct GliaChatView: View {
                 .cornerRadius(16)
 
             if !suggestedPrompts.isEmpty {
-                Text("Sugerencias:")
+                Text("Suggestions:")
                     .font(.caption)
                     .foregroundColor(theme.textMutedColor)
 
@@ -192,7 +192,7 @@ public struct GliaChatView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "bolt.fill")
                             .foregroundColor(.yellow)
-                        Text("Acción: \(tool)")
+                        Text("Action: \(tool)")
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundColor(theme.textMutedColor)
@@ -239,7 +239,7 @@ public struct GliaChatView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "gearshape.arrow.triangle.2.circlepath")
                         .foregroundColor(.yellow)
-                    Text("Ejecutando: \(tool)...")
+                    Text("Executing: \(tool)...")
                         .font(.caption)
                         .foregroundColor(.yellow)
                 }
@@ -272,7 +272,7 @@ public struct GliaChatView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "brain.head.profile")
                         .font(.caption)
-                    Text("Proceso de razonamiento")
+                    Text("Reasoning process")
                         .font(.caption)
                         .fontWeight(.medium)
                 }

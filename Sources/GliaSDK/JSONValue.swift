@@ -1,7 +1,7 @@
 import Foundation
 
-/// Representación fuertemente tipada y segura para concurrencia (`Sendable`) de cualquier valor JSON.
-/// Elimina la necesidad de `@unchecked Sendable` sobre `Any` garantizando la seguridad en Swift 6.
+/// Strongly-typed and concurrency-safe (`Sendable`) representation of any JSON value.
+/// Eliminates the need for `@unchecked Sendable` over `Any` ensuring full safety in Swift 6.
 public enum JSONValue: Sendable, Equatable, Hashable {
     case string(String)
     case number(Double)
@@ -157,7 +157,7 @@ extension JSONValue: ExpressibleByNilLiteral {
 
 // MARK: - Any / Foundation Conversion Helpers
 extension JSONValue {
-    /// Inicializa recursivamente un `JSONValue` a partir de un valor genérico (`Any`) como los retornados por `JSONSerialization`.
+    /// Recursively initializes a `JSONValue` from a generic value (`Any`) such as those returned by `JSONSerialization`.
     public static func fromAny(_ any: Any) -> JSONValue {
         switch any {
         case let json as JSONValue:

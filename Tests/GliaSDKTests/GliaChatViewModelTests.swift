@@ -50,7 +50,7 @@ final class GliaChatViewModelTests: XCTestCase {
             }
             try await Task.sleep(nanoseconds: 10_000_000) // 10ms poll
         }
-        XCTFail("Timeout esperando condición tras \(timeout) segundos")
+        XCTFail("Timeout waiting for condition after \(timeout) seconds")
     }
 
     func testConnectSuccessAndStreamAccumulation() async throws {
@@ -62,22 +62,22 @@ final class GliaChatViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.isConnected)
         XCTAssertNil(viewModel.errorMessage)
 
-        // Enviar mensaje del usuario
-        viewModel.send(prompt: "Hola")
+        // Send user message
+        viewModel.send(prompt: "Hello")
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .user)
-        XCTAssertEqual(viewModel.messages.first?.content, "Hola")
+        XCTAssertEqual(viewModel.messages.first?.content, "Hello")
         XCTAssertTrue(viewModel.isStreaming)
 
-        // Simular deltas de streaming
-        mockClient.emit(.thinkingDelta("Pensando..."))
-        try await waitUntil { viewModel.currentThinking == "Pensando..." }
-        XCTAssertEqual(viewModel.currentThinking, "Pensando...")
+        // Simulate streaming deltas
+        mockClient.emit(.thinkingDelta("Thinking..."))
+        try await waitUntil { viewModel.currentThinking == "Thinking..." }
+        XCTAssertEqual(viewModel.currentThinking, "Thinking...")
 
-        mockClient.emit(.messageDelta("Respuesta "))
-        mockClient.emit(.messageDelta("completa."))
-        try await waitUntil { viewModel.currentText == "Respuesta completa." }
-        XCTAssertEqual(viewModel.currentText, "Respuesta completa.")
+        mockClient.emit(.messageDelta("Complete "))
+        mockClient.emit(.messageDelta("response."))
+        try await waitUntil { viewModel.currentText == "Complete response." }
+        XCTAssertEqual(viewModel.currentText, "Complete response.")
 
         mockClient.emit(.toolCall(name: "search_db", args: [:]))
         try await waitUntil { viewModel.currentTool == "search_db" }
@@ -87,14 +87,14 @@ final class GliaChatViewModelTests: XCTestCase {
         try await waitUntil { viewModel.currentTool == nil }
         XCTAssertNil(viewModel.currentTool)
 
-        mockClient.emit(.done(fullMessage: "Respuesta completa."))
+        mockClient.emit(.done(fullMessage: "Complete response."))
         try await waitUntil { !viewModel.isStreaming && viewModel.messages.count == 2 }
 
         XCTAssertFalse(viewModel.isStreaming)
         XCTAssertEqual(viewModel.messages.count, 2)
         XCTAssertEqual(viewModel.messages[1].role, .assistant)
-        XCTAssertEqual(viewModel.messages[1].content, "Respuesta completa.")
-        XCTAssertEqual(viewModel.messages[1].thinking, "Pensando...")
+        XCTAssertEqual(viewModel.messages[1].content, "Complete response.")
+        XCTAssertEqual(viewModel.messages[1].thinking, "Thinking...")
     }
 
     func testStreamErrorHandling() async throws {
@@ -104,14 +104,14 @@ final class GliaChatViewModelTests: XCTestCase {
         viewModel.connect()
         try await waitUntil { viewModel.isConnected }
 
-        viewModel.send(prompt: "Pregunta")
+        viewModel.send(prompt: "Question")
         XCTAssertTrue(viewModel.isStreaming)
 
-        mockClient.emit(.error("Fallo temporal de API"))
-        try await waitUntil { !viewModel.isStreaming && viewModel.errorMessage == "Fallo temporal de API" }
+        mockClient.emit(.error("Temporary API failure"))
+        try await waitUntil { !viewModel.isStreaming && viewModel.errorMessage == "Temporary API failure" }
 
         XCTAssertFalse(viewModel.isStreaming)
-        XCTAssertEqual(viewModel.errorMessage, "Fallo temporal de API")
+        XCTAssertEqual(viewModel.errorMessage, "Temporary API failure")
     }
 
     func testToolNamePreservedInAssistantMessageAfterToolResult() async throws {
@@ -121,10 +121,10 @@ final class GliaChatViewModelTests: XCTestCase {
         viewModel.connect()
         try await waitUntil { viewModel.isConnected }
 
-        viewModel.send(prompt: "Consulta mi saldo")
+        viewModel.send(prompt: "Check balance")
         XCTAssertTrue(viewModel.isStreaming)
 
-        // Simular ejecución de tool: toolCall -> toolResult -> done
+        // Simulate tool execution: toolCall -> toolResult -> done
         mockClient.emit(.toolCall(name: "check_balance", args: [:]))
         try await waitUntil { viewModel.currentTool == "check_balance" }
         XCTAssertEqual(viewModel.currentTool, "check_balance")
@@ -133,7 +133,7 @@ final class GliaChatViewModelTests: XCTestCase {
         try await waitUntil { viewModel.currentTool == nil }
         XCTAssertNil(viewModel.currentTool)
 
-        mockClient.emit(.done(fullMessage: "Tu saldo disponible es $150.000 CLP"))
+        mockClient.emit(.done(fullMessage: "Your available balance is $150.00"))
         try await waitUntil { !viewModel.isStreaming && viewModel.messages.count == 2 }
 
         XCTAssertFalse(viewModel.isStreaming)
@@ -141,8 +141,8 @@ final class GliaChatViewModelTests: XCTestCase {
 
         let assistantMessage = viewModel.messages.last
         XCTAssertEqual(assistantMessage?.role, .assistant)
-        XCTAssertEqual(assistantMessage?.content, "Tu saldo disponible es $150.000 CLP")
-        // Verificar que toolName se preservó a pesar del ciclo de toolResult
+        XCTAssertEqual(assistantMessage?.content, "Your available balance is $150.00")
+        // Verify that toolName was preserved despite toolResult lifecycle
         XCTAssertEqual(assistantMessage?.toolName, "check_balance")
     }
 
@@ -153,34 +153,34 @@ final class GliaChatViewModelTests: XCTestCase {
         viewModel.connect()
         try await waitUntil { viewModel.isConnected }
 
-        viewModel.send(prompt: "Primer mensaje")
+        viewModel.send(prompt: "First message")
         XCTAssertTrue(viewModel.isStreaming)
         XCTAssertEqual(viewModel.messages.count, 1)
 
         try await waitUntil { mockClient.sentPrompts.count == 1 }
-        XCTAssertEqual(mockClient.sentPrompts, ["Primer mensaje"])
+        XCTAssertEqual(mockClient.sentPrompts, ["First message"])
 
-        // Intentar enviar mientras el stream sigue en curso
-        viewModel.send(prompt: "Segundo mensaje concurrente")
+        // Attempt to send while stream is still running
+        viewModel.send(prompt: "Second concurrent message")
         XCTAssertEqual(viewModel.messages.count, 1)
-        XCTAssertEqual(mockClient.sentPrompts, ["Primer mensaje"]) // No debe enviarse
+        XCTAssertEqual(mockClient.sentPrompts, ["First message"]) // Must not be sent
 
-        // Finalizar stream
-        mockClient.emit(.done(fullMessage: "Respuesta"))
+        // Finish stream
+        mockClient.emit(.done(fullMessage: "Response"))
         try await waitUntil { !viewModel.isStreaming }
         XCTAssertFalse(viewModel.isStreaming)
 
-        // Ahora sí debe permitir enviar
-        viewModel.send(prompt: "Tercer mensaje post streaming")
+        // Now it should allow sending
+        viewModel.send(prompt: "Third post-streaming message")
         try await waitUntil { mockClient.sentPrompts.count == 2 }
         XCTAssertEqual(viewModel.messages.count, 3) // user1, assistant1, user2
-        XCTAssertEqual(mockClient.sentPrompts, ["Primer mensaje", "Tercer mensaje post streaming"])
+        XCTAssertEqual(mockClient.sentPrompts, ["First message", "Third post-streaming message"])
     }
 
     func testInitialMessagesAndOnMessagesUpdated() async throws {
         let initial = [
-            GliaChatMessage(role: .user, content: "Historial previo 1"),
-            GliaChatMessage(role: .assistant, content: "Historial previo 2")
+            GliaChatMessage(role: .user, content: "Previous history 1"),
+            GliaChatMessage(role: .assistant, content: "Previous history 2")
         ]
 
         var capturedUpdates: [[GliaChatMessage]] = []
@@ -194,29 +194,29 @@ final class GliaChatViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.messages.count, 2)
-        XCTAssertEqual(viewModel.messages[0].content, "Historial previo 1")
-        XCTAssertEqual(viewModel.messages[1].content, "Historial previo 2")
+        XCTAssertEqual(viewModel.messages[0].content, "Previous history 1")
+        XCTAssertEqual(viewModel.messages[1].content, "Previous history 2")
 
         viewModel.connect()
         try await waitUntil { viewModel.isConnected }
 
-        viewModel.send(prompt: "Mensaje 3")
+        viewModel.send(prompt: "Message 3")
         XCTAssertEqual(viewModel.messages.count, 3)
         XCTAssertEqual(capturedUpdates.count, 1)
         XCTAssertEqual(capturedUpdates.last?.count, 3)
 
-        mockClient.emit(.done(fullMessage: "Respuesta 3"))
+        mockClient.emit(.done(fullMessage: "Response 3"))
         try await waitUntil { !viewModel.isStreaming && viewModel.messages.count == 4 }
 
         XCTAssertEqual(capturedUpdates.count, 2)
         XCTAssertEqual(capturedUpdates.last?.count, 4)
-        XCTAssertEqual(capturedUpdates.last?.last?.content, "Respuesta 3")
+        XCTAssertEqual(capturedUpdates.last?.last?.content, "Response 3")
     }
 
     func testGliaChatMessageCodableRoundtrip() throws {
         let original = [
-            GliaChatMessage(role: .user, content: "Pregunta del usuario"),
-            GliaChatMessage(role: .assistant, content: "Respuesta del bot", thinking: "Pensando...", toolName: "search")
+            GliaChatMessage(role: .user, content: "User question"),
+            GliaChatMessage(role: .assistant, content: "Bot response", thinking: "Thinking...", toolName: "search")
         ]
 
         let encoder = JSONEncoder()
@@ -227,10 +227,10 @@ final class GliaChatViewModelTests: XCTestCase {
 
         XCTAssertEqual(decoded.count, 2)
         XCTAssertEqual(decoded[0].role, .user)
-        XCTAssertEqual(decoded[0].content, "Pregunta del usuario")
+        XCTAssertEqual(decoded[0].content, "User question")
         XCTAssertEqual(decoded[1].role, .assistant)
-        XCTAssertEqual(decoded[1].content, "Respuesta del bot")
-        XCTAssertEqual(decoded[1].thinking, "Pensando...")
+        XCTAssertEqual(decoded[1].content, "Bot response")
+        XCTAssertEqual(decoded[1].thinking, "Thinking...")
         XCTAssertEqual(decoded[1].toolName, "search")
     }
 }

@@ -1,13 +1,13 @@
 import Foundation
 
-/// Representación agnóstica y segura de un mensaje recibido o enviado por WebSocket.
+/// Agnostic and safe representation of a message received or sent over WebSocket.
 public enum WebSocketMessage: Sendable, Equatable {
     case string(String)
     case data(Data)
 }
 
-/// Abstracción del transporte WebSocket para desacoplar `GliaClient` de `URLSessionWebSocketTask`
-/// y permitir testing unitario determinista (DIP / Clean Architecture).
+/// WebSocket transport abstraction to decouple `GliaClient` from `URLSessionWebSocketTask`
+/// and enable deterministic unit testing (DIP / Clean Architecture).
 public protocol WebSocketConnectionProtocol: Sendable {
     func send(_ message: WebSocketMessage) async throws
     func receive() async throws -> WebSocketMessage
@@ -21,10 +21,10 @@ public extension WebSocketConnectionProtocol {
     }
 }
 
-/// Factoría para instanciar conexiones WebSocket.
+/// Factory to instantiate WebSocket connections.
 public typealias WebSocketConnectionFactory = @Sendable (URL, URLSession) -> any WebSocketConnectionProtocol
 
-/// Implementación concreta de `WebSocketConnectionProtocol` respaldada por `URLSessionWebSocketTask`.
+/// Concrete implementation of `WebSocketConnectionProtocol` backed by `URLSessionWebSocketTask`.
 public final class URLSessionWebSocketConnection: WebSocketConnectionProtocol, @unchecked Sendable {
     private let task: URLSessionWebSocketTask
 

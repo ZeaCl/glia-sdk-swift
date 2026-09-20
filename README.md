@@ -2,7 +2,7 @@
 
 Official Swift client SDK and SwiftUI UI components for **Glia** — the high-performance, cloud-agnostic agent runtime built on Phoenix Channels WebSockets.
 
-📖 **[Read the Full Integration Guide (Guía de Integración)](docs/INTEGRATION_GUIDE.md)** for detailed step-by-step setup in iOS and macOS apps.
+📖 **[Read the Full Integration Guide](docs/INTEGRATION_GUIDE.md)** for detailed step-by-step setup in iOS and macOS apps.
 
 ---
 
@@ -40,7 +40,7 @@ Or in Xcode: **File > Add Package Dependencies...** and enter `https://github.co
 import GliaSDK
 
 let client = GliaClient(
-    gatewayUrl: "https://glia.yourdomain.com", // Automatically normalized to wss://.../socket/websocket
+    gatewayUrl: "https://gateway.yourdomain.com", // Automatically normalized to wss://.../socket/websocket
     appId: "your-app-id",
     userId: "user-12345",
     token: "jwt-bearer-token"
@@ -64,8 +64,8 @@ let quoteTool = GliaToolDefinition(
 
 // Send a prompt with optional system prompt and tools
 try await client.send(
-    prompt: "¿Cuál es el balance del fondo?",
-    systemPrompt: "Eres un asistente financiero.",
+    prompt: "What is the status of the deployment?",
+    systemPrompt: "You are a helpful assistant.",
     tools: [quoteTool]
 )
 
@@ -104,12 +104,12 @@ struct ChatScreen: View {
     var body: some View {
         GliaChatView(
             viewModel: viewModel,
-            title: "Mi Asistente",
-            welcomeMessage: "¡Hola! ¿En qué puedo ayudarte?",
-            placeholder: "Escribe tu consulta...",
+            title: "AI Assistant",
+            welcomeMessage: "Hello! How can I help you today?",
+            placeholder: "Type your query...",
             suggestedPrompts: [
-                "Consultar estado de cuenta",
-                "Programar una reunión"
+                "Check account status",
+                "Schedule a meeting"
             ],
             theme: GliaTheme(
                 primaryColor: Color.blue,

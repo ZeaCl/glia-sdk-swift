@@ -1,7 +1,7 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// Configuración visual y de tema completamente agnóstica para GliaChatView
+/// Completely agnostic visual and theme configuration for GliaChatView
 public struct GliaTheme: Sendable {
     public let backgroundColor: Color
     public let surfaceColor: Color

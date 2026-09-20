@@ -72,7 +72,7 @@ final class JSONValueTests: XCTestCase {
     }
 
     func testAnyCodableAndAnySendableCompatibilityAndSendability() async throws {
-        // Validar AnyCodable
+        // Validate AnyCodable
         let anyCodable = AnyCodable("swift 6 strict concurrency")
         XCTAssertEqual(anyCodable.value as? String, "swift 6 strict concurrency")
         XCTAssertEqual(anyCodable.toJSONValue, JSONValue.string("swift 6 strict concurrency"))
@@ -81,11 +81,11 @@ final class JSONValueTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AnyCodable.self, from: encoded)
         XCTAssertEqual(decoded, anyCodable)
 
-        // Validar AnySendable
+        // Validate AnySendable
         let anySendable = AnySendable(12345)
         XCTAssertEqual(anySendable.value as? Int, 12345)
 
-        // Validar envío a través de frontera Sendable
+        // Validate sending across Sendable boundary
         let task = Task { () -> String in
             let sent: AnySendable = AnySendable("safe-across-tasks")
             return sent.value as? String ?? ""

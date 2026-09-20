@@ -1,42 +1,42 @@
-# Guía de Integración — Glia Swift SDK (`GliaSDK` & `GliaUI`)
+# Integration Guide — Glia Swift SDK (`GliaSDK` & `GliaUI`)
 
-Esta guía describe cómo integrar el SDK oficial de **Glia** (`v1.0.0`) en cualquier aplicación iOS o macOS escrita en Swift y SwiftUI.
-
----
-
-## 🏗️ 1. Arquitectura y Módulos
-
-El paquete se divide en dos módulos desacoplados:
-
-1. **`GliaSDK` (Core / Red y Protocolo)**:
-   - Implementa la conexión WebSocket con **Phoenix Channels v2** (`phx_join`, `run`, heartbeat de 30s y reconexión automática con backoff exponencial).
-   - Manejo de streaming en tiempo real: razonamiento del agente (`thinking_delta`), fragmentos de texto (`message_delta`), invocación de herramientas (`tool_call` y `tool_result`), y finalización (`done`).
-   - 100% compatible con **Swift 6 Concurrency** (`Sendable`, `Actor-isolated`, tipos seguros con `JSONValue`).
-   - Cero dependencias de UI (compilable tanto en iOS/macOS como en Linux).
-
-2. **`GliaUI` (Componentes Visuales SwiftUI)**:
-   - **`GliaChatView`**: Vista de chat con scroll automático suave hacia los nuevos tokens, sugerencias rápidas de prompt, banner de estado y chips visuales para herramientas ejecutadas.
-   - **`GliaChatViewModel`**: `@MainActor` observable que gestiona los mensajes (`GliaChatMessage`), el estado de conexión y la sincronización con el cliente de red.
-   - **`GliaTheme`**: Estructura de diseño para adaptar la apariencia al sistema de diseño de la aplicación.
+This guide describes how to integrate the official **Glia** Swift SDK (`v1.0.0`) into any iOS or macOS application written in Swift and SwiftUI.
 
 ---
 
-## 📦 2. Instalación
+## 🏗️ 1. Architecture and Modules
 
-### Opción A: A través de Xcode (Recomendado para apps iOS)
-1. En Xcode, abre tu proyecto.
-2. Ve a **File > Add Package Dependencies...**
-3. En la barra de búsqueda, pega la URL del repositorio:
+The package is split into two decoupled modules:
+
+1. **`GliaSDK` (Core / Networking and Protocol)**:
+   - Implements WebSocket connection with **Phoenix Channels v2** (`phx_join`, `run`, 30s heartbeat, and automatic exponential backoff reconnect).
+   - Real-time streaming management: agent reasoning (`thinking_delta`), text deltas (`message_delta`), tool invocation (`tool_call` and `tool_result`), and completion (`done`).
+   - 100% compliant with **Swift 6 Concurrency** (`Sendable`, `Actor-isolated`, strongly typed with `JSONValue`).
+   - Zero UI dependencies (compiles on iOS, macOS, and Linux).
+
+2. **`GliaUI` (SwiftUI Visual Components)**:
+   - **`GliaChatView`**: Chat view with smooth auto-scroll to new tokens, suggested prompt chips, status banner, and visual badges for executed tools.
+   - **`GliaChatViewModel`**: `@MainActor` observable managing messages (`GliaChatMessage`), connection state, and synchronization with the network client.
+   - **`GliaTheme`**: Design structure to customize the appearance to your app's design system.
+
+---
+
+## 📦 2. Installation
+
+### Option A: Via Xcode (Recommended for iOS apps)
+1. In Xcode, open your project.
+2. Go to **File > Add Package Dependencies...**
+3. In the search bar, paste the repository URL:
    ```text
    https://github.com/ZeaCl/glia-sdk-swift.git
    ```
-4. En **Dependency Rule**, selecciona **Up to Next Major Version** a partir de `1.0.0`.
-5. Selecciona tu target principal y marca las librerías a vincular:
-   - `GliaSDK` (Requerido)
-   - `GliaUI` (Requerido para usar `GliaChatView`)
+4. Under **Dependency Rule**, select **Up to Next Major Version** starting from `1.0.0`.
+5. Select your main target and check the libraries to link:
+   - `GliaSDK` (Required)
+   - `GliaUI` (Required to use `GliaChatView`)
 
-### Opción B: A través de `Package.swift`
-Agrega el paquete en la sección `dependencies` de tu manifiesto:
+### Option B: Via `Package.swift`
+Add the package to the `dependencies` section of your manifest:
 
 ```swift
 // swift-tools-version: 5.9
@@ -45,7 +45,7 @@ dependencies: [
 ],
 targets: [
     .target(
-        name: "TuApp",
+        name: "YourApp",
         dependencies: [
             .product(name: "GliaSDK", package: "glia-sdk-swift"),
             .product(name: "GliaUI", package: "glia-sdk-swift")
@@ -56,32 +56,32 @@ targets: [
 
 ---
 
-## 🚀 3. Paso a Paso de Integración
+## 🚀 3. Integration Step-by-Step
 
-### Paso 1: Configurar e Inicializar `GliaClient`
+### Step 1: Configure and Initialize `GliaClient`
 
-El cliente requiere el endpoint del gateway, el identificador de la aplicación (`appId`), el ID del usuario (`userId`) y opcionalmente un Bearer token de autenticación (Soma PAT o JWT):
+The client requires the gateway endpoint, the application identifier (`appId`), user ID (`userId`), and optionally a Bearer authentication token (JWT):
 
 ```swift
 import GliaSDK
 
 let client = GliaClient(
-    gatewayUrl: "https://api.zea.cl/glia/v1", // Se normaliza automáticamente a wss://api.zea.cl/glia/v1/socket/websocket?vsn=2.0.0
-    appId: "nutrisnaps",
+    gatewayUrl: "https://api.yourdomain.com/glia/v1", // Automatically normalized to wss://api.yourdomain.com/glia/v1/socket/websocket?vsn=2.0.0
+    appId: "demo_app",
     userId: "user_uuid_12345",
-    token: "token_autenticacion_soma_si_aplica",
-    systemPrompt: "Eres un asistente nutricional inteligente especializado en análisis de comidas."
+    token: "jwt_bearer_token_if_applicable",
+    systemPrompt: "You are an intelligent assistant."
 )
 ```
 
 > [!TIP]
-> **Normalización Automática**: No te preocupes si configuras `https://` o `http://`; el SDK convierte internamente el protocolo a WebSockets seguros (`wss://` / `ws://`) y añade los query parameters del protocolo Phoenix (`vsn=2.0.0` y `token=...`).
+> **Automatic Normalization**: Do not worry if you pass `https://` or `http://`; the SDK internally converts the protocol to secure WebSockets (`wss://` / `ws://`) and adds the required Phoenix parameters (`vsn=2.0.0` and `token=...`).
 
 ---
 
-### Paso 2: Crear la Pantalla con `GliaChatView`
+### Step 2: Build the Screen with `GliaChatView`
 
-Crea tu vista en SwiftUI inyectando el cliente en el `GliaChatViewModel`. El ViewModel se conecta automáticamente y escucha el flujo de streaming:
+Create your SwiftUI view injecting the client into `GliaChatViewModel`. The ViewModel connects automatically and observes streaming events:
 
 ```swift
 import SwiftUI
@@ -98,18 +98,18 @@ struct AssistantChatScreen: View {
     var body: some View {
         GliaChatView(
             viewModel: viewModel,
-            title: "Asistente NutriSnaps",
-            welcomeMessage: "¡Hola! Soy tu asistente de nutrición. ¿En qué te puedo orientar hoy?",
-            placeholder: "Pregúntame sobre tus comidas, recetas o calorías...",
+            title: "AI Assistant",
+            welcomeMessage: "Hello! How can I help you today?",
+            placeholder: "Ask me anything...",
             suggestedPrompts: [
-                "¿Cuánta proteína tiene mi último desayuno?",
-                "Sugiere un snack saludable de 200 kcal",
-                "¿Cómo voy con mi meta diaria de agua?"
+                "What is my current account status?",
+                "Suggest a plan for today",
+                "How do I get started?"
             ],
-            theme: GliaTheme.nutrisnapsTheme,
-            disconnectOnDisappear: false // Recomendado: mantener en false si la vista está en un NavigationStack o modal
+            theme: GliaTheme.customTheme,
+            disconnectOnDisappear: false // Recommended: keep false if view is in a NavigationStack or sheet
         )
-        .navigationTitle("Asistente IA")
+        .navigationTitle("AI Assistant")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -117,21 +117,21 @@ struct AssistantChatScreen: View {
 
 ---
 
-### Paso 3: Personalizar el Tema Visual (`GliaTheme`)
+### Step 3: Customize Visual Theme (`GliaTheme`)
 
-Puedes adaptar todos los colores de la conversación (burbujas, fondo, textos y chips) al branding de tu app:
+You can adapt conversation colors (bubbles, background, text, and chips) to your app's branding:
 
 ```swift
 extension GliaTheme {
-    static var nutrisnapsTheme: GliaTheme {
+    static var customTheme: GliaTheme {
         GliaTheme(
             backgroundColor: Color(.systemBackground),
             surfaceColor: Color(.secondarySystemBackground),
             surfaceContainerHigh: Color(.tertiarySystemBackground),
-            primaryColor: Color.green,                 // Color de acento / botón enviar
+            primaryColor: Color.blue,                 // Accent color / send button
             textColor: Color(.label),
             textMutedColor: Color(.secondaryLabel),
-            userBubbleColor: Color.green.opacity(0.85),
+            userBubbleColor: Color.blue.opacity(0.85),
             userBubbleTextColor: .white,
             agentBubbleColor: Color(.secondarySystemBackground),
             agentBubbleTextColor: Color(.label),
@@ -146,55 +146,55 @@ extension GliaTheme {
 
 ---
 
-### Paso 4: Declarar Herramientas Dinámicas del Cliente (Opcional)
+### Step 4: Declare Dynamic Client Tools (Optional)
 
-Si el asistente puede invocar funciones locales o webhooks de tu servicio, defínelas usando `GliaToolDefinition` y la estructura fuertemente tipada `JSONValue`:
+If the assistant can invoke functions or webhooks, define them using `GliaToolDefinition` and the strongly typed `JSONValue`:
 
 ```swift
-let logFoodTool = GliaToolDefinition(
-    name: "log_food_entry",
-    description: "Registra un alimento consumido en el diario del usuario",
+let sampleTool = GliaToolDefinition(
+    name: "calculate_estimate",
+    description: "Calculates an estimate for the requested items",
     parameters: [
         "type": "object",
         "properties": [
-            "food_name": ["type": "string"],
-            "calories": ["type": "number"]
+            "item_name": ["type": "string"],
+            "quantity": ["type": "number"]
         ],
-        "required": ["food_name", "calories"]
+        "required": ["item_name", "quantity"]
     ],
-    webhookUrl: "https://api.nutrisnaps.cl/v1/food-logs"
+    webhookUrl: "https://api.yourdomain.com/v1/estimates"
 )
 
-// Enviar con herramientas disponibles para este turno:
+// Send with tools available for this turn:
 viewModel.send(
-    prompt: "Anota un café con leche y tostadas que comí recién",
-    tools: [logFoodTool]
+    prompt: "Calculate an estimate for 2 units of product A",
+    tools: [sampleTool]
 )
 ```
 
-Cuando el agente decida invocar la herramienta, `GliaChatView` mostrará un badge animado con el nombre de la acción (`"Acción: log_food_entry"`), el cual permanecerá asociado al mensaje final del asistente.
+When the agent decides to invoke the tool, `GliaChatView` displays an animated badge with the tool name (`"Tool: calculate_estimate"`), which remains associated with the final assistant message.
 
 ---
 
-### Paso 5: Manejo del Ciclo de Vida y Conexión
+### Step 5: Connection and Lifecycle Management
 
-* **Conexión Inicial**: Al instanciar `GliaChatViewModel`, su método `connect()` se suscribe automáticamente a los eventos. Si deseas conectarlo manualmente o reconectar ante un botón de reintento:
+* **Initial Connection**: When instantiating `GliaChatViewModel`, its `connect()` method automatically subscribes to events. To trigger connection manually:
   ```swift
   viewModel.connect()
   ```
-* **Desconexión**: Si la pantalla se destruye definitivamente o el usuario cierra sesión:
+* **Disconnection**: If the screen is destroyed or user logs out:
   ```swift
   viewModel.disconnect()
   ```
 * **`disconnectOnDisappear`**: 
-  * Por defecto es `false`. Esto previene que si el usuario navega a una sub-pantalla o minimiza temporalmente la aplicación, la conexión WebSocket se corte innecesariamente.
-  * Si deseas que se desconecte inmediatamente al salir de la pantalla, configúralo como `true`.
+  * Defaults to `false`. Prevents premature disconnection when navigating to child views or backgrounding the app.
+  * Set to `true` if you want immediate disconnection when the view disappears.
 
 ---
 
-## 🔒 4. Consideraciones de Seguridad y Red (Info.plist)
+## 🔒 4. Network and Security Considerations (Info.plist)
 
-Si pruebas en entornos locales de desarrollo con conexiones HTTP/WS sin TLS (`http://localhost:4003`), asegúrate de permitir excepciones de **App Transport Security (ATS)** en tu `Info.plist`:
+If testing in local development with non-TLS connections (`http://localhost:4003`), configure **App Transport Security (ATS)** exceptions in your `Info.plist`:
 
 ```xml
 <key>NSAppTransportSecurity</key>
@@ -204,18 +204,18 @@ Si pruebas en entornos locales de desarrollo con conexiones HTTP/WS sin TLS (`ht
 </dict>
 ```
 
-Para entornos de producción (`https://api.zea.cl/glia`), TLS está habilitado por defecto y no requiere ninguna configuración adicional en ATS.
+For production environments (`https://gateway.yourdomain.com`), TLS is enabled by default and requires no extra ATS configuration.
 
 ---
 
-## 📋 5. Resumen de Tipos Principales
+## 📋 5. Core Types Summary
 
-| Tipo | Módulo | Descripción |
+| Type | Module | Description |
 | :--- | :--- | :--- |
-| **`GliaClient`** | `GliaSDK` | Actor principal de red. Gestiona conexión WebSocket, tokens y streaming. |
-| **`GliaOptions`** | `GliaSDK` | Parámetros de inicialización (timeout, reconexión automática, prompts). |
-| **`GliaStreamEvent`** | `GliaSDK` | Enum con deltas en tiempo real (`messageDelta`, `thinkingDelta`, `toolCall`, `done`). |
-| **`JSONValue`** | `GliaSDK` | Representación segura (`Sendable`, `Codable`) de JSON sin `@unchecked Sendable`. |
-| **`GliaChatView`** | `GliaUI` | Vista SwiftUI completa para renderizar el chat con el asistente. |
-| **`GliaChatViewModel`** | `GliaUI` | ViewModel reactivo para gestionar mensajes y estado de streaming. |
-| **`GliaTheme`** | `GliaUI` | Estructura de personalización estética de la interfaz. |
+| **`GliaClient`** | `GliaSDK` | Main network actor. Manages WebSocket connection, tokens, and streaming. |
+| **`GliaOptions`** | `GliaSDK` | Configuration options (timeout, auto-reconnect, prompts). |
+| **`GliaStreamEvent`** | `GliaSDK` | Real-time event enum (`messageDelta`, `thinkingDelta`, `toolCall`, `done`). |
+| **`JSONValue`** | `GliaSDK` | Safe JSON representation (`Sendable`, `Codable`) without `@unchecked Sendable`. |
+| **`GliaChatView`** | `GliaUI` | Full SwiftUI chat interface for rendering assistant conversations. |
+| **`GliaChatViewModel`** | `GliaUI` | Reactive ViewModel managing messages and streaming state. |
+| **`GliaTheme`** | `GliaUI` | Visual theme customization palette. |

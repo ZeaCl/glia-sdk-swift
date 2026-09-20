@@ -85,7 +85,7 @@ public final class GliaChatViewModel: ObservableObject {
                 }
             } catch {
                 self.isConnected = false
-                self.errorMessage = "Error al conectar con Glia: \(error.localizedDescription)"
+                self.errorMessage = "Error connecting to Glia: \(error.localizedDescription)"
             }
         }
     }
@@ -120,7 +120,7 @@ public final class GliaChatViewModel: ObservableObject {
                 try await self.client.send(prompt: trimmed, systemPrompt: systemPrompt, tools: tools)
             } catch {
                 self.isStreaming = false
-                self.errorMessage = "Error al enviar: \(error.localizedDescription)"
+                self.errorMessage = "Error sending message: \(error.localizedDescription)"
             }
         }
     }

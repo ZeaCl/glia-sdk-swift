@@ -1,17 +1,17 @@
 # ============================================================================
 # cloudbuild.yaml — Glia Swift Client SDK (GliaSDK / GliaUI)
 # ============================================================================
-# ZeaCl/glia-sdk-swift#3: Pipeline GCP Cloud Build para compilación Swift & Microglia.
+# GCP Cloud Build pipeline for Swift compilation & Microglia audit.
 # ============================================================================
 
 steps:
-  # 1. Compilación y test suite en Linux con Swift 6 oficial
+  # 1. Compilation and test suite on Linux with official Swift 6
   - name: '${_SWIFT_IMAGE}'
     id: swift-test
     entrypoint: swift
     args: ['test', '-v']
 
-  # 2. Auditoría de seguridad estática y cumplimiento con Microglia
+  # 2. Static security audit and compliance with Microglia
   - name: '${_MICROGLIA_IMAGE}'
     id: microglia-audit
     entrypoint: microglia

@@ -16,6 +16,7 @@ public struct GliaChatView: View {
     private let tools: [GliaToolDefinition]
     private let disconnectOnDisappear: Bool
     private var pendingPrompt: Binding<String?>?
+    private let retryButtonTitle: String
 
     public init(
         viewModel: GliaChatViewModel,
@@ -27,7 +28,8 @@ public struct GliaChatView: View {
         systemPrompt: String? = nil,
         tools: [GliaToolDefinition] = [],
         disconnectOnDisappear: Bool = false,
-        pendingPrompt: Binding<String?>? = nil
+        pendingPrompt: Binding<String?>? = nil,
+        retryButtonTitle: String = "Retry"
     ) {
         self.viewModel = viewModel
         self.title = title
@@ -39,6 +41,7 @@ public struct GliaChatView: View {
         self.tools = tools
         self.disconnectOnDisappear = disconnectOnDisappear
         self.pendingPrompt = pendingPrompt
+        self.retryButtonTitle = retryButtonTitle
     }
 
     public var body: some View {
@@ -87,9 +90,9 @@ public struct GliaChatView: View {
                     Text(err)
                         .font(.caption)
                         .foregroundColor(theme.errorColor)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button("Reintentar") {
+                    Button(retryButtonTitle) {
                         viewModel.retryLastSend()
                     }
                     .font(.caption.bold())

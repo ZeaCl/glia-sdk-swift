@@ -243,14 +243,39 @@ final class GliaChatViewModelTests: XCTestCase {
         viewModel.onError = { _ in
             errorCallbackReceived = true
         }
+        viewModel.errorSanitizer = { _ in
+            "Custom localized error message"
+        }
 
         viewModel.connect()
         try await waitUntil { viewModel.errorMessage != nil }
 
         XCTAssertTrue(errorCallbackReceived)
-        XCTAssertEqual(viewModel.errorMessage, "Estamos con problemas y en estos momentos no podemos atender su solicitud. Por favor, intenta nuevamente en unos instantes.")
+        XCTAssertEqual(viewModel.errorMessage, "Custom localized error message")
         XCTAssertFalse(viewModel.errorMessage?.contains("Glia") == true)
         XCTAssertFalse(viewModel.errorMessage?.contains("Phoenix") == true)
+    }
+
+    func testStreamErrorInvokesOnErrorAndSanitizer() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        var capturedError: Error?
+        viewModel.onError = { err in
+            capturedError = err
+        }
+        viewModel.errorSanitizer = { err in
+            "Sanitized stream error: \(err.localizedDescription)"
+        }
+
+        viewModel.connect()
+        try await waitUntil { viewModel.isConnected }
+
+        mockClient.emit(.error("bad_gateway"))
+        try await waitUntil { !viewModel.isStreaming && viewModel.errorMessage != nil }
+
+        XCTAssertNotNil(capturedError)
+        XCTAssertEqual(viewModel.errorMessage, "Sanitized stream error: Server error: bad_gateway")
     }
 
     func testAutoReconnectOnSend() async throws {
@@ -266,19 +291,23 @@ final class GliaChatViewModelTests: XCTestCase {
         XCTAssertEqual(mockClient.sentPrompts, ["Auto-reconnect prompt"])
     }
 
-    func testRetryLastSend() async throws {
+    func testRetryLastSendDoesNotDuplicateUserMessage() async throws {
         let mockClient = MockGliaClient()
         let viewModel = GliaChatViewModel(client: mockClient)
 
         viewModel.send(prompt: "Initial prompt")
         try await waitUntil { mockClient.sentPrompts.count == 1 }
+        XCTAssertEqual(viewModel.messages.count, 1)
 
         mockClient.emit(.done(fullMessage: "First answer"))
-        try await waitUntil { !viewModel.isStreaming }
+        try await waitUntil { !viewModel.isStreaming && viewModel.messages.count == 2 }
 
+        // Retry should re-send the prompt without duplicating the user message in `messages`
         viewModel.retryLastSend()
         try await waitUntil { mockClient.sentPrompts.count == 2 }
 
+        // `messages` should STILL only have 2 messages (1 user, 1 assistant), NOT 3!
+        XCTAssertEqual(viewModel.messages.count, 2)
         XCTAssertEqual(mockClient.sentPrompts, ["Initial prompt", "Initial prompt"])
     }
 }

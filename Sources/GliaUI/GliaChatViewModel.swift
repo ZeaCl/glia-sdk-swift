@@ -44,7 +44,12 @@ public final class GliaChatViewModel: ObservableObject {
     @Published public private(set) var errorMessage: String? = nil
 
     public var onMessagesUpdated: (([GliaChatMessage]) -> Void)?
+    public var errorSanitizer: ((Error) -> String)?
+    public var onError: ((Error) -> Void)?
 
+    private var lastSentPrompt: String?
+    private var lastSentSystemPrompt: String?
+    private var lastSentTools: [GliaToolDefinition] = []
     private var lastExecutedTool: String? = nil
     private let client: GliaClientProtocol
     private var eventsTask: Task<Void, Never>?
@@ -85,7 +90,7 @@ public final class GliaChatViewModel: ObservableObject {
                 }
             } catch {
                 self.isConnected = false
-                self.errorMessage = "Error connecting to Glia: \(error.localizedDescription)"
+                self.errorMessage = self.formatError(error)
             }
         }
     }
@@ -99,9 +104,21 @@ public final class GliaChatViewModel: ObservableObject {
         }
     }
 
+    public func retryLastSend() {
+        if let prompt = lastSentPrompt {
+            send(prompt: prompt, systemPrompt: lastSentSystemPrompt, tools: lastSentTools)
+        } else {
+            connect()
+        }
+    }
+
     public func send(prompt: String, systemPrompt: String? = nil, tools: [GliaToolDefinition] = []) {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isStreaming else { return }
+
+        self.lastSentPrompt = trimmed
+        self.lastSentSystemPrompt = systemPrompt
+        self.lastSentTools = tools
 
         let userMsg = GliaChatMessage(role: .user, content: trimmed)
         messages.append(userMsg)
@@ -117,12 +134,44 @@ public final class GliaChatViewModel: ObservableObject {
         Task { [weak self] in
             guard let self = self else { return }
             do {
+                if !self.isConnected {
+                    try await self.client.connect()
+                    self.isConnected = true
+                    self.startEventsStreamIfNeeded()
+                }
                 try await self.client.send(prompt: trimmed, systemPrompt: systemPrompt, tools: tools)
             } catch {
                 self.isStreaming = false
-                self.errorMessage = "Error sending message: \(error.localizedDescription)"
+                self.errorMessage = self.formatError(error)
             }
         }
+    }
+
+    private func startEventsStreamIfNeeded() {
+        guard eventsTask == nil else { return }
+        eventsTask = Task { [weak self] in
+            guard let self = self else { return }
+            let stream = await self.client.observeEvents()
+            for await event in stream {
+                self.handleEvent(event)
+            }
+        }
+    }
+
+    private func formatError(_ error: Error) -> String {
+        onError?(error)
+        if let custom = errorSanitizer?(error) {
+            return custom
+        }
+        return "Estamos con problemas y en estos momentos no podemos atender su solicitud. Por favor, intenta nuevamente en unos instantes."
+    }
+
+    private func sanitizeErrorMessage(_ msg: String) -> String {
+        let lower = msg.lowercased()
+        if lower.contains("glia") || lower.contains("gateway") || lower.contains("phoenix") || lower.contains("websocket") {
+            return "Estamos con problemas y en estos momentos no podemos atender su solicitud. Por favor, intenta nuevamente en unos instantes."
+        }
+        return msg
     }
 
     private func handleEvent(_ event: GliaStreamEvent) {
@@ -167,7 +216,7 @@ public final class GliaChatViewModel: ObservableObject {
 
         case .error(let err):
             isStreaming = false
-            errorMessage = err
+            errorMessage = sanitizeErrorMessage(err)
         }
     }
 }

@@ -81,13 +81,19 @@ public struct GliaChatView: View {
             }
 
             if let err = viewModel.errorMessage {
-                HStack {
+                HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(theme.errorColor)
                     Text(err)
                         .font(.caption)
                         .foregroundColor(theme.errorColor)
+                        .lineLimit(2)
                     Spacer()
+                    Button("Reintentar") {
+                        viewModel.retryLastSend()
+                    }
+                    .font(.caption.bold())
+                    .foregroundColor(theme.primaryColor)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)

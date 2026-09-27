@@ -233,5 +233,53 @@ final class GliaChatViewModelTests: XCTestCase {
         XCTAssertEqual(decoded[1].thinking, "Thinking...")
         XCTAssertEqual(decoded[1].toolName, "search")
     }
+
+    func testErrorSanitizationAndCallbacks() async throws {
+        let mockClient = MockGliaClient()
+        mockClient.shouldFailConnect = true
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        var errorCallbackReceived = false
+        viewModel.onError = { _ in
+            errorCallbackReceived = true
+        }
+
+        viewModel.connect()
+        try await waitUntil { viewModel.errorMessage != nil }
+
+        XCTAssertTrue(errorCallbackReceived)
+        XCTAssertEqual(viewModel.errorMessage, "Estamos con problemas y en estos momentos no podemos atender su solicitud. Por favor, intenta nuevamente en unos instantes.")
+        XCTAssertFalse(viewModel.errorMessage?.contains("Glia") == true)
+        XCTAssertFalse(viewModel.errorMessage?.contains("Phoenix") == true)
+    }
+
+    func testAutoReconnectOnSend() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        XCTAssertFalse(viewModel.isConnected)
+
+        viewModel.send(prompt: "Auto-reconnect prompt")
+        try await waitUntil { viewModel.isConnected && mockClient.sentPrompts.contains("Auto-reconnect prompt") }
+
+        XCTAssertTrue(viewModel.isConnected)
+        XCTAssertEqual(mockClient.sentPrompts, ["Auto-reconnect prompt"])
+    }
+
+    func testRetryLastSend() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        viewModel.send(prompt: "Initial prompt")
+        try await waitUntil { mockClient.sentPrompts.count == 1 }
+
+        mockClient.emit(.done(fullMessage: "First answer"))
+        try await waitUntil { !viewModel.isStreaming }
+
+        viewModel.retryLastSend()
+        try await waitUntil { mockClient.sentPrompts.count == 2 }
+
+        XCTAssertEqual(mockClient.sentPrompts, ["Initial prompt", "Initial prompt"])
+    }
 }
 #endif

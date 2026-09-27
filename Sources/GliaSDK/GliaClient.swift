@@ -239,6 +239,11 @@ public actor GliaClient: GliaClientProtocol {
         systemPrompt: String? = nil,
         tools: [GliaToolDefinition] = []
     ) async throws {
+        // Auto-reconnect if connection was dropped or not yet established
+        if connection == nil || !isConnected {
+            try await connect()
+        }
+
         guard let conn = connection, isConnected else {
             throw GliaError.notConnected
         }

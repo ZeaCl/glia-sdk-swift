@@ -43,6 +43,8 @@ public final class GliaChatViewModel: ObservableObject {
     @Published public private(set) var currentTool: String? = nil
     @Published public private(set) var errorMessage: String? = nil
 
+    public static let defaultErrorMessage: String = "We are currently experiencing difficulties and cannot process your request. Please try again in a few moments."
+
     public var onMessagesUpdated: (([GliaChatMessage]) -> Void)?
     public var errorSanitizer: ((Error) -> String)?
     public var onError: ((Error) -> Void)?
@@ -77,6 +79,7 @@ public final class GliaChatViewModel: ObservableObject {
     public func connect() {
         eventsTask?.cancel()
         eventsTask = Task { [weak self] in
+            defer { self?.eventsTask = nil }
             guard let self = self else { return }
 
             do {
@@ -106,13 +109,17 @@ public final class GliaChatViewModel: ObservableObject {
 
     public func retryLastSend() {
         if let prompt = lastSentPrompt {
-            send(prompt: prompt, systemPrompt: lastSentSystemPrompt, tools: lastSentTools)
+            sendInternal(prompt: prompt, systemPrompt: lastSentSystemPrompt, tools: lastSentTools, isRetry: true)
         } else {
             connect()
         }
     }
 
     public func send(prompt: String, systemPrompt: String? = nil, tools: [GliaToolDefinition] = []) {
+        sendInternal(prompt: prompt, systemPrompt: systemPrompt, tools: tools, isRetry: false)
+    }
+
+    private func sendInternal(prompt: String, systemPrompt: String?, tools: [GliaToolDefinition], isRetry: Bool) {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isStreaming else { return }
 
@@ -120,9 +127,11 @@ public final class GliaChatViewModel: ObservableObject {
         self.lastSentSystemPrompt = systemPrompt
         self.lastSentTools = tools
 
-        let userMsg = GliaChatMessage(role: .user, content: trimmed)
-        messages.append(userMsg)
-        onMessagesUpdated?(messages)
+        if !isRetry {
+            let userMsg = GliaChatMessage(role: .user, content: trimmed)
+            messages.append(userMsg)
+            onMessagesUpdated?(messages)
+        }
 
         isStreaming = true
         currentThinking = ""
@@ -148,8 +157,9 @@ public final class GliaChatViewModel: ObservableObject {
     }
 
     private func startEventsStreamIfNeeded() {
-        guard eventsTask == nil else { return }
+        eventsTask?.cancel()
         eventsTask = Task { [weak self] in
+            defer { self?.eventsTask = nil }
             guard let self = self else { return }
             let stream = await self.client.observeEvents()
             for await event in stream {
@@ -163,15 +173,19 @@ public final class GliaChatViewModel: ObservableObject {
         if let custom = errorSanitizer?(error) {
             return custom
         }
-        return "Estamos con problemas y en estos momentos no podemos atender su solicitud. Por favor, intenta nuevamente en unos instantes."
-    }
 
-    private func sanitizeErrorMessage(_ msg: String) -> String {
-        let lower = msg.lowercased()
-        if lower.contains("glia") || lower.contains("gateway") || lower.contains("phoenix") || lower.contains("websocket") {
-            return "Estamos con problemas y en estos momentos no podemos atender su solicitud. Por favor, intenta nuevamente en unos instantes."
+        let desc: String
+        if case GliaError.serverError(let msg) = error {
+            desc = msg
+        } else {
+            desc = error.localizedDescription
         }
-        return msg
+
+        let lower = desc.lowercased()
+        if lower.contains("glia") || lower.contains("gateway") || lower.contains("phoenix") || lower.contains("websocket") {
+            return Self.defaultErrorMessage
+        }
+        return desc
     }
 
     private func handleEvent(_ event: GliaStreamEvent) {
@@ -216,7 +230,7 @@ public final class GliaChatViewModel: ObservableObject {
 
         case .error(let err):
             isStreaming = false
-            errorMessage = sanitizeErrorMessage(err)
+            errorMessage = formatError(GliaError.serverError(err))
         }
     }
 }

@@ -224,6 +224,8 @@ public actor GliaClient: GliaClientProtocol {
             reply.resume(throwing: GliaError.connectionClosed("Voluntary disconnection"))
         }
         pendingReplies.removeAll()
+
+        removeLifecycleObservers()
     }
 
     private func cancelInternalConnection() {
@@ -604,14 +606,31 @@ public actor GliaClient: GliaClientProtocol {
         #endif
     }
 
+    private func removeLifecycleObservers() {
+        #if canImport(UIKit) && !os(watchOS)
+        let center = NotificationCenter.default
+        for observer in lifecycleObservers {
+            center.removeObserver(observer)
+        }
+        lifecycleObservers.removeAll()
+        #endif
+    }
+
+    deinit {
+        #if canImport(UIKit) && !os(watchOS)
+        let center = NotificationCenter.default
+        for observer in lifecycleObservers {
+            center.removeObserver(observer)
+        }
+        #endif
+    }
+
     private func handleAppDidEnterBackground() async {
-        await telemetryManager.pause()
         heartbeatTask?.cancel()
         heartbeatTask = nil
     }
 
     private func handleAppWillEnterForeground() async {
-        await telemetryManager.resume()
         if isConnectedInternal && isJoinedInternal {
             startHeartbeat()
             await flushBufferedTelemetry()

@@ -11,10 +11,12 @@ public struct TelemetrySanitizer: Sendable {
         "token",
         "secret",
         "authorization",
+        "authentication",
         "jwt",
         "email",
         "bearer",
-        "auth",
+        "auth_token",
+        "auth_key",
         "credit_card",
         "card_number",
         "cvv",
@@ -47,6 +49,9 @@ public struct TelemetrySanitizer: Sendable {
     /// Checks if a metadata key is considered sensitive.
     public static func isSensitiveKey(_ key: String) -> Bool {
         let lower = key.lowercased()
+        if lower == "auth" || lower.hasPrefix("auth_") || lower.hasSuffix("_auth") {
+            return true
+        }
         return sensitiveKeySubstrings.contains { lower.contains($0) }
     }
 

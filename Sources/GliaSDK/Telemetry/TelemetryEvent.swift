@@ -33,7 +33,7 @@ public struct TelemetryEvent: Sendable, Codable, Equatable {
         self.type = type
         self.name = name
         self.flow = flow
-        self.endpoint = endpoint
+        self.endpoint = endpoint.map { TelemetrySanitizer.sanitizeString($0) }
         self.message = message.map { TelemetrySanitizer.sanitizeString($0) }
         self.code = code
         self.errorType = errorType

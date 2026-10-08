@@ -33,6 +33,11 @@ final class TelemetryTests: XCTestCase {
         let metadata: [String: JSONValue] = [
             "user_password": .string("super_secret_123"),
             "auth_token": .string("token_xyz"),
+            "auth": .string("bearer_token"),
+            "client_auth": .string("custom_auth_header"),
+            "author": .string("Gabriel Garcia Marquez"),
+            "authority": .string("RootCA"),
+            "authenticated": .bool(true),
             "credit_card": .string("4532-xxxx-xxxx-1234"),
             "flow_step": .string("checkout_initiated"),
             "safe_number": .number(42)
@@ -40,9 +45,27 @@ final class TelemetryTests: XCTestCase {
         let sanitizedMeta = TelemetrySanitizer.sanitizeMetadata(metadata)!
         XCTAssertEqual(sanitizedMeta["user_password"]?.stringValue, "[REDACTED]")
         XCTAssertEqual(sanitizedMeta["auth_token"]?.stringValue, "[REDACTED]")
+        XCTAssertEqual(sanitizedMeta["auth"]?.stringValue, "[REDACTED]")
+        XCTAssertEqual(sanitizedMeta["client_auth"]?.stringValue, "[REDACTED]")
+        // Ensure "author", "authority", "authenticated" are NOT falsely redacted
+        XCTAssertEqual(sanitizedMeta["author"]?.stringValue, "Gabriel Garcia Marquez")
+        XCTAssertEqual(sanitizedMeta["authority"]?.stringValue, "RootCA")
+        XCTAssertEqual(sanitizedMeta["authenticated"]?.boolValue, true)
         XCTAssertEqual(sanitizedMeta["credit_card"]?.stringValue, "[REDACTED]")
         XCTAssertEqual(sanitizedMeta["flow_step"]?.stringValue, "checkout_initiated")
         XCTAssertEqual(sanitizedMeta["safe_number"]?.doubleValue, 42.0)
+
+        // Test endpoint sanitization in TelemetryEvent
+        let eventWithSensitiveEndpoint = TelemetryEvent(
+            seq: 1,
+            type: .error,
+            name: "error",
+            endpoint: "/api/v1/scan?token=secret_123&email=dev@zea.cl"
+        )
+        XCTAssertEqual(
+            eventWithSensitiveEndpoint.endpoint,
+            "/api/v1/scan?token=secret_123&email=[REDACTED_EMAIL]"
+        )
     }
 
     // MARK: - 2. Offline FIFO Buffer (Capacity 50, drop oldest)

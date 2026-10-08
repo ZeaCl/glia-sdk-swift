@@ -12,7 +12,6 @@ public actor TelemetryManager {
 
     private var buffer: [TelemetryEvent] = []
     private var circuitBreakerRecords: [String: Date] = [:]
-    private var isPaused: Bool = false
 
     public init(
         maxBufferSize: Int = defaultMaxBufferSize,
@@ -72,15 +71,5 @@ public actor TelemetryManager {
     public func clear() {
         buffer.removeAll()
         circuitBreakerRecords.removeAll()
-    }
-
-    /// Pauses background tasks/timers if applicable. Preserves the in-memory buffer intact.
-    public func pause() {
-        isPaused = true
-    }
-
-    /// Resumes normal operation when returning to foreground.
-    public func resume() {
-        isPaused = false
     }
 }

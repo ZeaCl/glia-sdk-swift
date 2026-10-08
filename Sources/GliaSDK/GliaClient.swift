@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit) && !os(watchOS)
+import UIKit
+#endif
 
 public protocol GliaClientProtocol: Sendable {
     var isConnected: Bool { get async }
@@ -6,6 +9,8 @@ public protocol GliaClientProtocol: Sendable {
     func disconnect() async
     func send(prompt: String, systemPrompt: String?, tools: [GliaToolDefinition]) async throws
     func observeEvents() async -> AsyncStream<GliaStreamEvent>
+    func trackError(flow: String, error: Error, endpoint: String?, code: String?, metadata: [String: JSONValue]?) async
+    func trackEvent(name: String, flow: String?, metadata: [String: JSONValue]?) async
 }
 
 public extension GliaClientProtocol {
@@ -16,10 +21,78 @@ public extension GliaClientProtocol {
     ) async throws {
         try await send(prompt: prompt, systemPrompt: systemPrompt, tools: tools)
     }
+
+    func trackError(
+        flow: String,
+        error: Error,
+        endpoint: String? = nil,
+        code: String? = nil,
+        metadata: [String: JSONValue]? = nil
+    ) async {
+        await trackError(flow: flow, error: error, endpoint: endpoint, code: code, metadata: metadata)
+    }
+
+    func trackError(
+        flow: String,
+        error: Error,
+        endpoint: String? = nil,
+        code: String? = nil,
+        metadata: [String: Any]?
+    ) async {
+        let jsonMeta = metadata?.mapValues { JSONValue.fromAny($0) }
+        await trackError(flow: flow, error: error, endpoint: endpoint, code: code, metadata: jsonMeta)
+    }
+
+    func trackEvent(
+        name: String,
+        flow: String? = nil,
+        metadata: [String: JSONValue]? = nil
+    ) async {
+        await trackEvent(name: name, flow: flow, metadata: metadata)
+    }
+
+    func trackEvent(
+        name: String,
+        flow: String? = nil,
+        metadata: [String: Any]?
+    ) async {
+        let jsonMeta = metadata?.mapValues { JSONValue.fromAny($0) }
+        await trackEvent(name: name, flow: flow, metadata: jsonMeta)
+    }
 }
 
 public actor GliaClient: GliaClientProtocol {
-    public let options: GliaOptions
+    private static let sharedLock = NSLock()
+    private static var _shared: GliaClient?
+
+    nonisolated public static var shared: GliaClient {
+        get {
+            sharedLock.lock()
+            defer { sharedLock.unlock() }
+            if let existing = _shared {
+                return existing
+            }
+            let defaultClient = GliaClient(
+                gatewayUrl: "https://api.zea.cl",
+                appId: "default",
+                userId: "anonymous"
+            )
+            _shared = defaultClient
+            return defaultClient
+        }
+        set {
+            sharedLock.lock()
+            defer { sharedLock.unlock() }
+            _shared = newValue
+        }
+    }
+
+    nonisolated public static func configure(shared client: GliaClient) {
+        self.shared = client
+    }
+
+    nonisolated public let options: GliaOptions
+    public let telemetryManager: TelemetryManager
     private let session: URLSession
     private let connectionFactory: WebSocketConnectionFactory
 
@@ -35,14 +108,19 @@ public actor GliaClient: GliaClientProtocol {
 
     private var continuations: [UUID: AsyncStream<GliaStreamEvent>.Continuation] = [:]
     private var pendingReplies: [String: CheckedContinuation<[String: JSONValue], Error>] = [:]
+    #if canImport(UIKit) && !os(watchOS)
+    private var lifecycleObservers: [any NSObjectProtocol] = []
+    #endif
 
     public init(
         options: GliaOptions,
         session: URLSession = .shared,
+        telemetryManager: TelemetryManager? = nil,
         connectionFactory: @escaping WebSocketConnectionFactory = defaultWebSocketConnectionFactory
     ) {
         self.options = options
         self.session = session
+        self.telemetryManager = telemetryManager ?? TelemetryManager()
         self.connectionFactory = connectionFactory
     }
 
@@ -53,6 +131,7 @@ public actor GliaClient: GliaClientProtocol {
         token: String? = nil,
         systemPrompt: String? = nil,
         session: URLSession = .shared,
+        telemetryManager: TelemetryManager? = nil,
         connectionFactory: @escaping WebSocketConnectionFactory = defaultWebSocketConnectionFactory
     ) {
         self.options = GliaOptions(
@@ -63,6 +142,7 @@ public actor GliaClient: GliaClientProtocol {
             systemPrompt: systemPrompt
         )
         self.session = session
+        self.telemetryManager = telemetryManager ?? TelemetryManager()
         self.connectionFactory = connectionFactory
     }
 
@@ -107,6 +187,7 @@ public actor GliaClient: GliaClientProtocol {
 
         // Cancel previous connection if exists
         cancelInternalConnection()
+        ensureLifecycleObservers()
 
         let conn = connectionFactory(url, session)
         self.connection = conn
@@ -195,6 +276,7 @@ public actor GliaClient: GliaClientProtocol {
         }
 
         self.isJoinedInternal = true
+        await flushBufferedTelemetry()
     }
 
     private func failPendingReply(ref: String, error: Error) {
@@ -408,6 +490,134 @@ public actor GliaClient: GliaClientProtocol {
         }
     }
 
+    // MARK: - Telemetry & Error Reporting
+    public func trackError(
+        flow: String,
+        error: Error,
+        endpoint: String? = nil,
+        code: String? = nil,
+        metadata: [String: JSONValue]? = nil
+    ) async {
+        let effectiveCode = code ?? (error as NSError).domain + "_\((error as NSError).code)"
+        let shouldSuppress = await telemetryManager.shouldSuppressError(flow: flow, code: effectiveCode)
+        if shouldSuppress {
+            return
+        }
+
+        let seq = await telemetryManager.nextSequence()
+        let event = TelemetryEvent.errorEvent(
+            seq: seq,
+            flow: flow,
+            error: error,
+            endpoint: endpoint,
+            code: effectiveCode,
+            metadata: metadata
+        )
+
+        await sendOrBuffer(event: event)
+    }
+
+    public func trackEvent(
+        name: String,
+        flow: String? = nil,
+        metadata: [String: JSONValue]? = nil
+    ) async {
+        let seq = await telemetryManager.nextSequence()
+        let event = TelemetryEvent.customEvent(
+            seq: seq,
+            name: name,
+            flow: flow,
+            metadata: metadata
+        )
+
+        await sendOrBuffer(event: event)
+    }
+
+    private func sendOrBuffer(event: TelemetryEvent) async {
+        ensureLifecycleObservers()
+        if isConnectedInternal && isJoinedInternal, let conn = connection {
+            do {
+                let ref = String(messageRef)
+                messageRef += 1
+                let frame = PhoenixFrame(
+                    joinRef: nil,
+                    ref: ref,
+                    topic: topic,
+                    event: "track_event",
+                    payload: event.toPhoenixPayload()
+                )
+                let text = try frame.serialize()
+                try await conn.send(.string(text))
+            } catch {
+                await telemetryManager.enqueue(event)
+            }
+        } else {
+            await telemetryManager.enqueue(event)
+        }
+    }
+
+    private func flushBufferedTelemetry() async {
+        guard isConnectedInternal && isJoinedInternal, let conn = connection else { return }
+        let pendingEvents = await telemetryManager.flush()
+        for event in pendingEvents {
+            let ref = String(messageRef)
+            messageRef += 1
+            let frame = PhoenixFrame(
+                joinRef: nil,
+                ref: ref,
+                topic: topic,
+                event: "track_event",
+                payload: event.toPhoenixPayload()
+            )
+            if let text = try? frame.serialize() {
+                try? await conn.send(.string(text))
+            }
+        }
+    }
+
+    // MARK: - Lifecycle Management
+    private func ensureLifecycleObservers() {
+        #if canImport(UIKit) && !os(watchOS)
+        guard lifecycleObservers.isEmpty else { return }
+        let center = NotificationCenter.default
+        let bgObserver = center.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            Task { [weak self] in
+                await self?.handleAppDidEnterBackground()
+            }
+        }
+
+        let fgObserver = center.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            Task { [weak self] in
+                await self?.handleAppWillEnterForeground()
+            }
+        }
+
+        lifecycleObservers.append(contentsOf: [bgObserver, fgObserver])
+        #endif
+    }
+
+    private func handleAppDidEnterBackground() async {
+        await telemetryManager.pause()
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+    }
+
+    private func handleAppWillEnterForeground() async {
+        await telemetryManager.resume()
+        if isConnectedInternal && isJoinedInternal {
+            startHeartbeat()
+            await flushBufferedTelemetry()
+        }
+    }
+
     // MARK: - URL Normalization
     public static func normalizeGatewayURL(_ urlString: String, token: String? = nil) throws -> URL {
         var trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -454,3 +664,41 @@ public actor GliaClient: GliaClientProtocol {
         return url
     }
 }
+
+// MARK: - Synchronous Convenience Extensions
+public extension GliaClient {
+    nonisolated func trackError(
+        flow: String,
+        error: Error,
+        endpoint: String? = nil,
+        code: String? = nil,
+        metadata: [String: Any]? = nil
+    ) {
+        let jsonMeta = metadata?.mapValues { JSONValue.fromAny($0) }
+        Task {
+            await self.trackError(
+                flow: flow,
+                error: error,
+                endpoint: endpoint,
+                code: code,
+                metadata: jsonMeta
+            )
+        }
+    }
+
+    nonisolated func trackEvent(
+        name: String,
+        flow: String? = nil,
+        metadata: [String: Any]? = nil
+    ) {
+        let jsonMeta = metadata?.mapValues { JSONValue.fromAny($0) }
+        Task {
+            await self.trackEvent(
+                name: name,
+                flow: flow,
+                metadata: jsonMeta
+            )
+        }
+    }
+}
+

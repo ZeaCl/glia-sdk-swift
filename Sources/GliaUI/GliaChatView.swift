@@ -212,13 +212,14 @@ public struct GliaChatView: View {
                     .cornerRadius(8)
                 }
 
-                Text(msg.content)
-                    .font(.body)
-                    .foregroundColor(theme.agentBubbleTextColor)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(theme.agentBubbleColor)
-                    .cornerRadius(18)
+                GliaMarkdownView(
+                    markdown: msg.content,
+                    theme: theme
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(theme.agentBubbleColor)
+                .cornerRadius(18)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -258,13 +259,15 @@ public struct GliaChatView: View {
             }
 
             if !viewModel.currentText.isEmpty {
-                Text(viewModel.currentText)
-                    .font(.body)
-                    .foregroundColor(theme.agentBubbleTextColor)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(theme.agentBubbleColor)
-                    .cornerRadius(18)
+                GliaMarkdownView(
+                    markdown: viewModel.currentText,
+                    theme: theme,
+                    isStreaming: true
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(theme.agentBubbleColor)
+                .cornerRadius(18)
             }
         }
     }

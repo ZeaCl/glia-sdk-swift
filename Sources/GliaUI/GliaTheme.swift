@@ -17,6 +17,10 @@ public struct GliaTheme: Sendable {
     public let thinkingTextColor: Color
     public let thinkingBorderColor: Color
     public let errorColor: Color
+    public let codeBlockBackground: Color
+    public let codeBlockTextColor: Color
+    public let tableBorderColor: Color
+    public let tableHeaderBackground: Color
 
     public init(
         backgroundColor: Color = Color(red: 0.07, green: 0.07, blue: 0.07),
@@ -32,7 +36,11 @@ public struct GliaTheme: Sendable {
         thinkingBgColor: Color = Color(red: 0.20, green: 0.60, blue: 1.0).opacity(0.12),
         thinkingTextColor: Color = Color(red: 0.40, green: 0.80, blue: 1.0),
         thinkingBorderColor: Color = Color(red: 0.20, green: 0.60, blue: 1.0).opacity(0.4),
-        errorColor: Color = Color(red: 0.95, green: 0.25, blue: 0.25)
+        errorColor: Color = Color(red: 0.95, green: 0.25, blue: 0.25),
+        codeBlockBackground: Color = Color(red: 0.10, green: 0.10, blue: 0.10),
+        codeBlockTextColor: Color = Color(white: 0.92),
+        tableBorderColor: Color = Color(white: 0.25),
+        tableHeaderBackground: Color = Color(white: 0.18)
     ) {
         self.backgroundColor = backgroundColor
         self.surfaceColor = surfaceColor
@@ -48,6 +56,10 @@ public struct GliaTheme: Sendable {
         self.thinkingTextColor = thinkingTextColor
         self.thinkingBorderColor = thinkingBorderColor
         self.errorColor = errorColor
+        self.codeBlockBackground = codeBlockBackground
+        self.codeBlockTextColor = codeBlockTextColor
+        self.tableBorderColor = tableBorderColor
+        self.tableHeaderBackground = tableHeaderBackground
     }
 }
 #endif

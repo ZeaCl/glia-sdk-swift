@@ -7,8 +7,20 @@ final class MockGliaClient: GliaClientProtocol, @unchecked Sendable {
     var isConnected: Bool = false
     var shouldFailConnect: Bool = false
     var sentPrompts: [String] = []
+    var historyToReturn: [GliaMessage] = []
+    var historyHasMore: Bool = false
+    var lastRequestedBeforeSequence: Int? = nil
 
     private var eventContinuation: AsyncStream<GliaStreamEvent>.Continuation?
+
+    func fetchHistory(limit: Int, beforeSequence: Int?) async throws -> GliaHistoryResponse {
+        lastRequestedBeforeSequence = beforeSequence
+        return GliaHistoryResponse(
+            messages: historyToReturn,
+            hasMore: historyHasMore,
+            sessionId: "mock-session"
+        )
+    }
 
     func connect() async throws {
         if shouldFailConnect {
@@ -309,6 +321,89 @@ final class GliaChatViewModelTests: XCTestCase {
         // `messages` should STILL only have 2 messages (1 user, 1 assistant), NOT 3!
         XCTAssertEqual(viewModel.messages.count, 2)
         XCTAssertEqual(mockClient.sentPrompts, ["Initial prompt", "Initial prompt"])
+    }
+
+    func testViewModelAutoLoadsHistoryOnConnect() async throws {
+        let mockClient = MockGliaClient()
+        mockClient.historyToReturn = [
+            GliaMessage(
+                id: "msg-1",
+                role: .user,
+                content: "Previous user question",
+                sequence: 1,
+                insertedAt: Date(timeIntervalSince1970: 1000)
+            ),
+            GliaMessage(
+                id: "msg-2",
+                role: .assistant,
+                content: "Previous assistant answer",
+                sequence: 2,
+                insertedAt: Date(timeIntervalSince1970: 1005)
+            )
+        ]
+        mockClient.historyHasMore = true
+
+        let viewModel = GliaChatViewModel(client: mockClient)
+        XCTAssertTrue(viewModel.messages.isEmpty)
+
+        viewModel.connect()
+        try await waitUntil { viewModel.isConnected && viewModel.messages.count == 2 }
+
+        XCTAssertEqual(viewModel.messages.count, 2)
+        XCTAssertEqual(viewModel.messages[0].content, "Previous user question")
+        XCTAssertEqual(viewModel.messages[0].role, .user)
+        XCTAssertEqual(viewModel.messages[0].sequence, 1)
+
+        XCTAssertEqual(viewModel.messages[1].content, "Previous assistant answer")
+        XCTAssertEqual(viewModel.messages[1].role, .assistant)
+        XCTAssertEqual(viewModel.messages[1].sequence, 2)
+        XCTAssertTrue(viewModel.hasMoreMessages)
+    }
+
+    func testViewModelFetchOlderMessagesPagination() async throws {
+        let mockClient = MockGliaClient()
+        mockClient.historyToReturn = [
+            GliaMessage(
+                id: "msg-3",
+                role: .assistant,
+                content: "Recent message",
+                sequence: 3,
+                insertedAt: Date(timeIntervalSince1970: 1020)
+            )
+        ]
+        mockClient.historyHasMore = true
+
+        let viewModel = GliaChatViewModel(client: mockClient)
+        viewModel.connect()
+        try await waitUntil { viewModel.messages.count == 1 }
+
+        // Configure older messages for the pagination request
+        mockClient.historyToReturn = [
+            GliaMessage(
+                id: "msg-1",
+                role: .user,
+                content: "Older message 1",
+                sequence: 1,
+                insertedAt: Date(timeIntervalSince1970: 1000)
+            ),
+            GliaMessage(
+                id: "msg-2",
+                role: .assistant,
+                content: "Older message 2",
+                sequence: 2,
+                insertedAt: Date(timeIntervalSince1970: 1010)
+            )
+        ]
+        mockClient.historyHasMore = false
+
+        await viewModel.fetchOlderMessages()
+
+        XCTAssertEqual(mockClient.lastRequestedBeforeSequence, 3)
+        XCTAssertEqual(viewModel.messages.count, 3)
+        XCTAssertEqual(viewModel.messages[0].content, "Older message 1")
+        XCTAssertEqual(viewModel.messages[1].content, "Older message 2")
+        XCTAssertEqual(viewModel.messages[2].content, "Recent message")
+        XCTAssertFalse(viewModel.hasMoreMessages)
     }
 }
 #endif

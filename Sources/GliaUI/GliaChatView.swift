@@ -53,6 +53,28 @@ public struct GliaChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
+                        if viewModel.hasMoreMessages {
+                            HStack {
+                                Spacer()
+                                if viewModel.isLoadingHistory {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Button(action: {
+                                        Task {
+                                            await viewModel.fetchOlderMessages()
+                                        }
+                                    }) {
+                                        Text("Load earlier messages")
+                                            .font(.caption)
+                                            .foregroundColor(theme.primaryColor)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                        }
+
                         if viewModel.messages.isEmpty && !viewModel.isStreaming {
                             welcomeView
                         }
@@ -80,6 +102,9 @@ public struct GliaChatView: View {
                 // Auto-scroll during continuous streaming without animations to prevent saturating the Main Thread
                 .onChange(of: viewModel.currentText) { _ in
                     proxy.scrollTo("live_streaming_indicator", anchor: .bottom)
+                }
+                .refreshable {
+                    await viewModel.fetchOlderMessages()
                 }
             }
 

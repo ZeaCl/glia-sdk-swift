@@ -66,8 +66,10 @@ public struct GliaChatView: View {
                                         }
                                     }) {
                                         Text("Load earlier messages")
-                                            .font(.caption)
+                                            .font(.caption.bold())
                                             .foregroundColor(theme.primaryColor)
+                                            .frame(minHeight: 44)
+                                            .contentShape(Rectangle())
                                     }
                                 }
                                 Spacer()
@@ -92,10 +94,10 @@ public struct GliaChatView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
-                .onChange(of: viewModel.messages.count) { _ in
-                    if let last = viewModel.messages.last {
+                .onChange(of: viewModel.messages.last?.id) { lastId in
+                    if let lastId = lastId, !viewModel.isLoadingHistory {
                         withAnimation {
-                            proxy.scrollTo(last.id, anchor: .bottom)
+                            proxy.scrollTo(lastId, anchor: .bottom)
                         }
                     }
                 }

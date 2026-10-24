@@ -2,6 +2,9 @@
 import Foundation
 import SwiftUI
 import GliaSDK
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
 
 public struct GliaChatMessage: Identifiable, Sendable, Codable {
     public let id: UUID
@@ -31,13 +34,45 @@ public struct GliaChatMessage: Identifiable, Sendable, Codable {
     }
 
     public init(from message: GliaMessage) {
-        self.id = UUID(uuidString: message.id) ?? UUID()
+        self.id = Self.deterministicUUID(from: message.id)
         self.role = message.role
         self.content = message.content
         self.thinking = message.thinking
         self.toolName = message.toolName
         self.sequence = message.sequence
         self.timestamp = message.insertedAt ?? Date()
+    }
+
+    public static func deterministicUUID(from string: String) -> UUID {
+        if let uuid = UUID(uuidString: string) {
+            return uuid
+        }
+        #if canImport(CryptoKit)
+        let digest = Insecure.MD5.hash(data: Data(string.utf8))
+        var bytes = Array(digest)
+        bytes[6] = (bytes[6] & 0x0F) | 0x30 // UUID v3 (MD5 based)
+        bytes[8] = (bytes[8] & 0x3F) | 0x80 // RFC 4122 variant
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+        #else
+        var bytes = [UInt8](repeating: 0, count: 16)
+        let utf8 = Array(string.utf8)
+        for (i, byte) in utf8.enumerated() {
+            bytes[i % 16] ^= byte
+        }
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+        #endif
     }
 }
 
@@ -139,24 +174,55 @@ public final class GliaChatViewModel: ObservableObject {
                     return false
                 }
                 let fetchedChatMessages = sorted.map { GliaChatMessage(from: $0) }
-
-                if self.messages.isEmpty {
-                    self.messages = fetchedChatMessages
-                    self.onMessagesUpdated?(self.messages)
-                } else {
-                    let existingIds = Set(self.messages.map { $0.id })
-                    let newMessages = fetchedChatMessages.filter { !existingIds.contains($0.id) }
-                    if !newMessages.isEmpty {
-                        var combined = newMessages
-                        combined.append(contentsOf: self.messages)
-                        self.messages = combined
-                        self.onMessagesUpdated?(self.messages)
-                    }
-                }
+                self.mergeHistoryMessages(fetchedChatMessages)
             }
         } catch {
-            // Non-fatal error during background history loading
+            onError?(error)
+            Task { [weak self] in
+                await self?.client.trackError(
+                    flow: "chat_history",
+                    error: error,
+                    endpoint: "get_history",
+                    code: nil,
+                    metadata: ["operation": .string("initial_load")]
+                )
+            }
         }
+    }
+
+    private func mergeHistoryMessages(_ fetchedChatMessages: [GliaChatMessage]) {
+        if self.messages.isEmpty {
+            self.messages = fetchedChatMessages
+            self.onMessagesUpdated?(self.messages)
+            return
+        }
+
+        var result: [GliaChatMessage] = []
+        var existingUnmatched = self.messages
+
+        for historyMsg in fetchedChatMessages {
+            if let matchedIndex = existingUnmatched.firstIndex(where: { existing in
+                if existing.id == historyMsg.id { return true }
+                if existing.role == historyMsg.role &&
+                   existing.content.trimmingCharacters(in: .whitespacesAndNewlines) == historyMsg.content.trimmingCharacters(in: .whitespacesAndNewlines) {
+                    if existing.sequence == nil || existing.sequence == historyMsg.sequence {
+                        let timeDiff = abs(historyMsg.timestamp.timeIntervalSince(existing.timestamp))
+                        return timeDiff < 60.0
+                    }
+                }
+                return false
+            }) {
+                // Replace local unsequenced message with official historical message
+                result.append(historyMsg)
+                existingUnmatched.remove(at: matchedIndex)
+            } else {
+                result.append(historyMsg)
+            }
+        }
+
+        result.append(contentsOf: existingUnmatched)
+        self.messages = result
+        self.onMessagesUpdated?(self.messages)
     }
 
     public func fetchOlderMessages(limit: Int = 20) async {
@@ -191,7 +257,16 @@ public final class GliaChatViewModel: ObservableObject {
                 }
             }
         } catch {
-            // Non-fatal pagination error
+            onError?(error)
+            Task { [weak self] in
+                await self?.client.trackError(
+                    flow: "chat_history",
+                    error: error,
+                    endpoint: "get_history",
+                    code: nil,
+                    metadata: ["operation": .string("pagination")]
+                )
+            }
         }
     }
 

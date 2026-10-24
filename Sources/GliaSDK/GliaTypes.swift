@@ -54,10 +54,40 @@ public struct AnySendable: Sendable {
 }
 
 /// Message roles for Glia conversations
-public enum GliaMessageRole: String, Codable, Sendable {
+public enum GliaMessageRole: Sendable, Codable, Equatable, Hashable, RawRepresentable {
     case user
     case assistant
     case system
+    case unknown(String)
+
+    public var rawValue: String {
+        switch self {
+        case .user: return "user"
+        case .assistant: return "assistant"
+        case .system: return "system"
+        case .unknown(let val): return val
+        }
+    }
+
+    public init(rawValue: String) {
+        switch rawValue.lowercased() {
+        case "user": self = .user
+        case "assistant": self = .assistant
+        case "system": self = .system
+        default: self = .unknown(rawValue)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let str = try container.decode(String.self)
+        self.init(rawValue: str)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 /// A conversation message exchanged with Glia runtime or stored in conversation history

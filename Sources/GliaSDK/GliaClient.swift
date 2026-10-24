@@ -39,7 +39,7 @@ public extension GliaClientProtocol {
         code: String? = nil,
         metadata: [String: JSONValue]? = nil
     ) async {
-        await trackError(flow: flow, error: error, endpoint: endpoint, code: code, metadata: metadata)
+        // Default no-op for custom protocol implementors/mocks
     }
 
     func trackError(
@@ -58,7 +58,7 @@ public extension GliaClientProtocol {
         flow: String? = nil,
         metadata: [String: JSONValue]? = nil
     ) async {
-        await trackEvent(name: name, flow: flow, metadata: metadata)
+        // Default no-op for custom protocol implementors/mocks
     }
 
     func trackEvent(
@@ -447,7 +447,7 @@ public actor GliaClient: GliaClientProtocol {
         let text = try frame.serialize()
         try await connection.send(.string(text))
 
-        let timeoutSeconds = options.timeout
+        let timeoutSeconds = min(options.timeout, 10.0)
         let timeoutTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
             await self?.failPendingReply(ref: ref, error: GliaError.connectionTimeout)
@@ -485,8 +485,9 @@ public actor GliaClient: GliaClientProtocol {
             throw GliaError.serverError("Invalid HTTP response")
         }
         guard (200...299).contains(httpResponse.statusCode) else {
-            let errorMsg = String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)"
-            throw GliaError.serverError(errorMsg)
+            let rawMsg = String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)"
+            let cleanMsg = String(rawMsg.prefix(256)).trimmingCharacters(in: .whitespacesAndNewlines)
+            throw GliaError.serverError(cleanMsg)
         }
 
         return try JSONDecoder().decode(GliaHistoryResponse.self, from: data)
@@ -522,7 +523,10 @@ public actor GliaClient: GliaClientProtocol {
             path = String(path.dropLast())
         }
 
-        components.path = "\(path)/api/conversations/\(sessionId)/messages"
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove("/")
+        let encodedSession = sessionId.addingPercentEncoding(withAllowedCharacters: allowed) ?? sessionId
+        components.path = "\(path)/api/conversations/\(encodedSession)/messages"
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "limit", value: String(limit))
         ]

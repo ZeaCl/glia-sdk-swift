@@ -439,4 +439,37 @@ final class GliaClientTests: XCTestCase {
         XCTAssertTrue(url.query?.contains("limit=15") == true)
         XCTAssertTrue(url.query?.contains("before_sequence=42") == true)
     }
+
+    func testSessionIdPathTraversalSanitizationInREST() throws {
+        let options = GliaOptions(
+            gatewayUrl: "https://api.zea.cl",
+            appId: "app",
+            userId: "user",
+            sessionId: "app/tenant:admin/../secret"
+        )
+        let client = GliaClient(options: options)
+
+        let url = try client.buildHistoryRequestURL(limit: 20, beforeSequence: nil)
+        XCTAssertEqual(url.path, "/api/conversations/app%2Ftenant:admin%2F..%2Fsecret/messages")
+        XCTAssertFalse(url.path.contains("/../"))
+    }
+
+    func testMessageRoleResilienceToUnknownRoles() throws {
+        let json = """
+        {
+          "id": "m-tool",
+          "role": "tool",
+          "content": "Result from tool execution"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let msg = try JSONDecoder().decode(GliaMessage.self, from: data)
+
+        XCTAssertEqual(msg.role, .unknown("tool"))
+        XCTAssertEqual(msg.role.rawValue, "tool")
+
+        let encoded = try JSONEncoder().encode(msg)
+        let roundtrip = try JSONDecoder().decode(GliaMessage.self, from: encoded)
+        XCTAssertEqual(roundtrip.role, .unknown("tool"))
+    }
 }

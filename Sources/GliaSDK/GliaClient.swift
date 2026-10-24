@@ -11,9 +11,19 @@ public protocol GliaClientProtocol: Sendable {
     func observeEvents() async -> AsyncStream<GliaStreamEvent>
     func trackError(flow: String, error: Error, endpoint: String?, code: String?, metadata: [String: JSONValue]?) async
     func trackEvent(name: String, flow: String?, metadata: [String: JSONValue]?) async
+    func fetchHistory(limit: Int, beforeSequence: Int?) async throws -> GliaHistoryResponse
 }
 
 public extension GliaClientProtocol {
+    func fetchHistory(limit: Int, beforeSequence: Int?) async throws -> GliaHistoryResponse {
+        GliaHistoryResponse(messages: [], hasMore: false, sessionId: nil)
+    }
+
+    func fetchHistory(limit: Int = 20, beforeSequence: Int? = nil) async throws -> [GliaMessage] {
+        let response = try await fetchHistory(limit: limit, beforeSequence: beforeSequence)
+        return response.messages
+    }
+
     func send(
         prompt: String,
         systemPrompt: String? = nil,
@@ -128,6 +138,7 @@ public actor GliaClient: GliaClientProtocol {
         gatewayUrl: String,
         appId: String,
         userId: String,
+        sessionId: String? = nil,
         token: String? = nil,
         systemPrompt: String? = nil,
         session: URLSession = .shared,
@@ -138,6 +149,7 @@ public actor GliaClient: GliaClientProtocol {
             gatewayUrl: gatewayUrl,
             appId: appId,
             userId: userId,
+            sessionId: sessionId,
             token: token,
             systemPrompt: systemPrompt
         )
@@ -146,8 +158,35 @@ public actor GliaClient: GliaClientProtocol {
         self.connectionFactory = connectionFactory
     }
 
+    public init(
+        gatewayUrl: String,
+        appId: String,
+        userId: String,
+        token: String? = nil,
+        systemPrompt: String? = nil,
+        session: URLSession = .shared,
+        telemetryManager: TelemetryManager? = nil,
+        connectionFactory: @escaping WebSocketConnectionFactory = defaultWebSocketConnectionFactory
+    ) {
+        self.init(
+            gatewayUrl: gatewayUrl,
+            appId: appId,
+            userId: userId,
+            sessionId: nil,
+            token: token,
+            systemPrompt: systemPrompt,
+            session: session,
+            telemetryManager: telemetryManager,
+            connectionFactory: connectionFactory
+        )
+    }
+
+    nonisolated public var sessionId: String {
+        options.sessionId ?? "\(options.appId):\(options.userId)"
+    }
+
     public var topic: String {
-        "session:\(options.appId):\(options.userId)"
+        "session:\(sessionId)"
     }
 
     public var isConnected: Bool {
@@ -361,6 +400,141 @@ public actor GliaClient: GliaClientProtocol {
 
         let text = try frame.serialize()
         try await conn.send(.string(text))
+    }
+
+    // MARK: - Conversation History
+    public func fetchHistory(
+        limit: Int = 20,
+        beforeSequence: Int? = nil
+    ) async throws -> GliaHistoryResponse {
+        if isConnectedInternal && isJoinedInternal, let conn = connection {
+            do {
+                return try await fetchHistoryViaWebSocket(limit: limit, beforeSequence: beforeSequence, connection: conn)
+            } catch {
+                // If websocket fetch failed, fallback to REST
+                return try await fetchHistoryViaREST(limit: limit, beforeSequence: beforeSequence)
+            }
+        } else {
+            return try await fetchHistoryViaREST(limit: limit, beforeSequence: beforeSequence)
+        }
+    }
+
+    private func fetchHistoryViaWebSocket(
+        limit: Int,
+        beforeSequence: Int?,
+        connection: any WebSocketConnectionProtocol
+    ) async throws -> GliaHistoryResponse {
+        let ref = String(messageRef)
+        messageRef += 1
+
+        var payload: [String: JSONValue] = [
+            "limit": .number(Double(limit))
+        ]
+        if let seq = beforeSequence {
+            payload["before_sequence"] = .number(Double(seq))
+        } else {
+            payload["before_sequence"] = .null
+        }
+
+        let frame = PhoenixFrame(
+            joinRef: nil,
+            ref: ref,
+            topic: topic,
+            event: "get_history",
+            payload: payload
+        )
+
+        let text = try frame.serialize()
+        try await connection.send(.string(text))
+
+        let timeoutSeconds = options.timeout
+        let timeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+            await self?.failPendingReply(ref: ref, error: GliaError.connectionTimeout)
+        }
+        defer {
+            timeoutTask.cancel()
+        }
+
+        let reply = try await withCheckedThrowingContinuation { continuation in
+            self.pendingReplies[ref] = continuation
+        }
+
+        return try decodeHistoryFromPayload(reply)
+    }
+
+    private func decodeHistoryFromPayload(_ payload: [String: JSONValue]) throws -> GliaHistoryResponse {
+        let data = try JSONEncoder().encode(JSONValue.object(payload))
+        return try JSONDecoder().decode(GliaHistoryResponse.self, from: data)
+    }
+
+    private func fetchHistoryViaREST(
+        limit: Int,
+        beforeSequence: Int?
+    ) async throws -> GliaHistoryResponse {
+        let url = try buildHistoryRequestURL(limit: limit, beforeSequence: beforeSequence)
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        if let token = options.token, !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GliaError.serverError("Invalid HTTP response")
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let errorMsg = String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)"
+            throw GliaError.serverError(errorMsg)
+        }
+
+        return try JSONDecoder().decode(GliaHistoryResponse.self, from: data)
+    }
+
+    nonisolated public func buildHistoryRequestURL(limit: Int, beforeSequence: Int?) throws -> URL {
+        var trimmed = options.gatewayUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.contains("://") {
+            trimmed = "https://" + trimmed
+        }
+        guard var components = URLComponents(string: trimmed) else {
+            throw GliaError.invalidURL(options.gatewayUrl)
+        }
+
+        switch components.scheme?.lowercased() {
+        case "ws":
+            components.scheme = "http"
+        case "wss":
+            components.scheme = "https"
+        case "http", "https":
+            break
+        default:
+            components.scheme = "https"
+        }
+
+        var path = components.path
+        if path.hasSuffix("/socket/websocket") {
+            path = String(path.dropLast("/socket/websocket".count))
+        } else if path.hasSuffix("/socket") {
+            path = String(path.dropLast("/socket".count))
+        }
+        if path.hasSuffix("/") {
+            path = String(path.dropLast())
+        }
+
+        components.path = "\(path)/api/conversations/\(sessionId)/messages"
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "limit", value: String(limit))
+        ]
+        if let seq = beforeSequence {
+            queryItems.append(URLQueryItem(name: "before_sequence", value: String(seq)))
+        }
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw GliaError.invalidURL(options.gatewayUrl)
+        }
+        return url
     }
 
     // MARK: - Receive Loop
@@ -663,7 +837,11 @@ public actor GliaClient: GliaClientProtocol {
         if path.hasSuffix("/") {
             path = String(path.dropLast())
         }
-        if !path.hasSuffix("/socket/websocket") {
+        if path.hasSuffix("/socket/websocket") {
+            // Already contains the full websocket path
+        } else if path.hasSuffix("/socket") {
+            path += "/websocket"
+        } else {
             path += "/socket/websocket"
         }
         components.path = path

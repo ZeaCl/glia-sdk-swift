@@ -3,17 +3,13 @@ import Foundation
 import SwiftUI
 import GliaSDK
 
-public enum GliaMessageRole: String, Codable, Sendable {
-    case user
-    case assistant
-}
-
 public struct GliaChatMessage: Identifiable, Sendable, Codable {
     public let id: UUID
     public let role: GliaMessageRole
     public let content: String
     public let thinking: String?
     public let toolName: String?
+    public let sequence: Int?
     public let timestamp: Date
 
     public init(
@@ -22,6 +18,7 @@ public struct GliaChatMessage: Identifiable, Sendable, Codable {
         content: String,
         thinking: String? = nil,
         toolName: String? = nil,
+        sequence: Int? = nil,
         timestamp: Date = Date()
     ) {
         self.id = id
@@ -29,7 +26,18 @@ public struct GliaChatMessage: Identifiable, Sendable, Codable {
         self.content = content
         self.thinking = thinking
         self.toolName = toolName
+        self.sequence = sequence
         self.timestamp = timestamp
+    }
+
+    public init(from message: GliaMessage) {
+        self.id = UUID(uuidString: message.id) ?? UUID()
+        self.role = message.role
+        self.content = message.content
+        self.thinking = message.thinking
+        self.toolName = message.toolName
+        self.sequence = message.sequence
+        self.timestamp = message.insertedAt ?? Date()
     }
 }
 
@@ -42,12 +50,15 @@ public final class GliaChatViewModel: ObservableObject {
     @Published public private(set) var currentText: String = ""
     @Published public private(set) var currentTool: String? = nil
     @Published public private(set) var errorMessage: String? = nil
+    @Published public private(set) var hasMoreMessages: Bool = false
+    @Published public private(set) var isLoadingHistory: Bool = false
 
     public static let defaultErrorMessage: String = "We are currently experiencing difficulties and cannot process your request. Please try again in a few moments."
 
     public var onMessagesUpdated: (([GliaChatMessage]) -> Void)?
     public var errorSanitizer: ((Error) -> String)?
     public var onError: ((Error) -> Void)?
+    public let autoLoadHistory: Bool
 
     private var lastSentPrompt: String?
     private var lastSentSystemPrompt: String?
@@ -59,10 +70,12 @@ public final class GliaChatViewModel: ObservableObject {
     public init(
         client: GliaClientProtocol,
         initialMessages: [GliaChatMessage] = [],
+        autoLoadHistory: Bool = true,
         onMessagesUpdated: (([GliaChatMessage]) -> Void)? = nil
     ) {
         self.client = client
         self.messages = initialMessages
+        self.autoLoadHistory = autoLoadHistory
         self.onMessagesUpdated = onMessagesUpdated
     }
 
@@ -88,6 +101,13 @@ public final class GliaChatViewModel: ObservableObject {
                 self.errorMessage = nil
 
                 let stream = await self.client.observeEvents()
+
+                if self.autoLoadHistory {
+                    Task { [weak self] in
+                        await self?.loadInitialHistory()
+                    }
+                }
+
                 for await event in stream {
                     self.handleEvent(event)
                 }
@@ -95,6 +115,83 @@ public final class GliaChatViewModel: ObservableObject {
                 self.isConnected = false
                 self.errorMessage = self.formatError(error)
             }
+        }
+    }
+
+    // MARK: - Conversation History & Pagination
+    public func loadInitialHistory(limit: Int = 20) async {
+        guard !isLoadingHistory else { return }
+        isLoadingHistory = true
+        defer { isLoadingHistory = false }
+
+        do {
+            let response = try await client.fetchHistory(limit: limit, beforeSequence: nil)
+            self.hasMoreMessages = response.hasMore
+
+            if !response.messages.isEmpty {
+                let sorted = response.messages.sorted { m1, m2 in
+                    if let s1 = m1.sequence, let s2 = m2.sequence {
+                        return s1 < s2
+                    }
+                    if let d1 = m1.insertedAt, let d2 = m2.insertedAt {
+                        return d1 < d2
+                    }
+                    return false
+                }
+                let fetchedChatMessages = sorted.map { GliaChatMessage(from: $0) }
+
+                if self.messages.isEmpty {
+                    self.messages = fetchedChatMessages
+                    self.onMessagesUpdated?(self.messages)
+                } else {
+                    let existingIds = Set(self.messages.map { $0.id })
+                    let newMessages = fetchedChatMessages.filter { !existingIds.contains($0.id) }
+                    if !newMessages.isEmpty {
+                        var combined = newMessages
+                        combined.append(contentsOf: self.messages)
+                        self.messages = combined
+                        self.onMessagesUpdated?(self.messages)
+                    }
+                }
+            }
+        } catch {
+            // Non-fatal error during background history loading
+        }
+    }
+
+    public func fetchOlderMessages(limit: Int = 20) async {
+        guard !isLoadingHistory, hasMoreMessages else { return }
+        let minSequence = messages.compactMap { $0.sequence }.min()
+
+        isLoadingHistory = true
+        defer { isLoadingHistory = false }
+
+        do {
+            let response = try await client.fetchHistory(limit: limit, beforeSequence: minSequence)
+            self.hasMoreMessages = response.hasMore
+
+            if !response.messages.isEmpty {
+                let sorted = response.messages.sorted { m1, m2 in
+                    if let s1 = m1.sequence, let s2 = m2.sequence {
+                        return s1 < s2
+                    }
+                    if let d1 = m1.insertedAt, let d2 = m2.insertedAt {
+                        return d1 < d2
+                    }
+                    return false
+                }
+                let olderMessages = sorted.map { GliaChatMessage(from: $0) }
+                let existingIds = Set(self.messages.map { $0.id })
+                let filtered = olderMessages.filter { !existingIds.contains($0.id) }
+                if !filtered.isEmpty {
+                    var updated = filtered
+                    updated.append(contentsOf: self.messages)
+                    self.messages = updated
+                    self.onMessagesUpdated?(self.messages)
+                }
+            }
+        } catch {
+            // Non-fatal pagination error
         }
     }
 

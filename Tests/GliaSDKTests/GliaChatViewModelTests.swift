@@ -7,8 +7,24 @@ final class MockGliaClient: GliaClientProtocol, @unchecked Sendable {
     var isConnected: Bool = false
     var shouldFailConnect: Bool = false
     var sentPrompts: [String] = []
+    var historyToReturn: [GliaMessage] = []
+    var historyHasMore: Bool = false
+    var lastRequestedBeforeSequence: Int? = nil
+    var shouldFailFetchHistory: Bool = false
 
     private var eventContinuation: AsyncStream<GliaStreamEvent>.Continuation?
+
+    func fetchHistory(limit: Int, beforeSequence: Int?) async throws -> GliaHistoryResponse {
+        if shouldFailFetchHistory {
+            throw GliaError.serverError("500 Internal Server Error")
+        }
+        lastRequestedBeforeSequence = beforeSequence
+        return GliaHistoryResponse(
+            messages: historyToReturn,
+            hasMore: historyHasMore,
+            sessionId: "mock-session"
+        )
+    }
 
     func connect() async throws {
         if shouldFailConnect {
@@ -309,6 +325,147 @@ final class GliaChatViewModelTests: XCTestCase {
         // `messages` should STILL only have 2 messages (1 user, 1 assistant), NOT 3!
         XCTAssertEqual(viewModel.messages.count, 2)
         XCTAssertEqual(mockClient.sentPrompts, ["Initial prompt", "Initial prompt"])
+    }
+
+    func testViewModelAutoLoadsHistoryOnConnect() async throws {
+        let mockClient = MockGliaClient()
+        mockClient.historyToReturn = [
+            GliaMessage(
+                id: "msg-1",
+                role: .user,
+                content: "Previous user question",
+                sequence: 1,
+                insertedAt: Date(timeIntervalSince1970: 1000)
+            ),
+            GliaMessage(
+                id: "msg-2",
+                role: .assistant,
+                content: "Previous assistant answer",
+                sequence: 2,
+                insertedAt: Date(timeIntervalSince1970: 1005)
+            )
+        ]
+        mockClient.historyHasMore = true
+
+        let viewModel = GliaChatViewModel(client: mockClient)
+        XCTAssertTrue(viewModel.messages.isEmpty)
+
+        viewModel.connect()
+        try await waitUntil { viewModel.isConnected && viewModel.messages.count == 2 }
+
+        XCTAssertEqual(viewModel.messages.count, 2)
+        XCTAssertEqual(viewModel.messages[0].content, "Previous user question")
+        XCTAssertEqual(viewModel.messages[0].role, .user)
+        XCTAssertEqual(viewModel.messages[0].sequence, 1)
+
+        XCTAssertEqual(viewModel.messages[1].content, "Previous assistant answer")
+        XCTAssertEqual(viewModel.messages[1].role, .assistant)
+        XCTAssertEqual(viewModel.messages[1].sequence, 2)
+        XCTAssertTrue(viewModel.hasMoreMessages)
+    }
+
+    func testViewModelFetchOlderMessagesPagination() async throws {
+        let mockClient = MockGliaClient()
+        mockClient.historyToReturn = [
+            GliaMessage(
+                id: "msg-3",
+                role: .assistant,
+                content: "Recent message",
+                sequence: 3,
+                insertedAt: Date(timeIntervalSince1970: 1020)
+            )
+        ]
+        mockClient.historyHasMore = true
+
+        let viewModel = GliaChatViewModel(client: mockClient)
+        viewModel.connect()
+        try await waitUntil { viewModel.messages.count == 1 }
+
+        // Configure older messages for the pagination request
+        mockClient.historyToReturn = [
+            GliaMessage(
+                id: "msg-1",
+                role: .user,
+                content: "Older message 1",
+                sequence: 1,
+                insertedAt: Date(timeIntervalSince1970: 1000)
+            ),
+            GliaMessage(
+                id: "msg-2",
+                role: .assistant,
+                content: "Older message 2",
+                sequence: 2,
+                insertedAt: Date(timeIntervalSince1970: 1010)
+            )
+        ]
+        mockClient.historyHasMore = false
+
+        await viewModel.fetchOlderMessages()
+
+        XCTAssertEqual(mockClient.lastRequestedBeforeSequence, 3)
+        XCTAssertEqual(viewModel.messages.count, 3)
+        XCTAssertEqual(viewModel.messages[0].content, "Older message 1")
+        XCTAssertEqual(viewModel.messages[1].content, "Older message 2")
+        XCTAssertEqual(viewModel.messages[2].content, "Recent message")
+        XCTAssertFalse(viewModel.hasMoreMessages)
+    }
+
+    func testDeterministicUUIDForCustomIds() {
+        let u1 = GliaChatMessage.deterministicUUID(from: "msg-1234")
+        let u2 = GliaChatMessage.deterministicUUID(from: "msg-1234")
+        XCTAssertEqual(u1, u2)
+
+        let standardUUID = UUID()
+        let converted = GliaChatMessage.deterministicUUID(from: standardUUID.uuidString)
+        XCTAssertEqual(converted, standardUUID)
+    }
+
+    func testHistoryDeduplicationWithLocalUnsequencedMessage() async throws {
+        let mockClient = MockGliaClient()
+        // Local unsequenced message already present
+        let localUserMsg = GliaChatMessage(
+            role: .user,
+            content: "Hello, who are you?",
+            timestamp: Date()
+        )
+        let viewModel = GliaChatViewModel(client: mockClient, initialMessages: [localUserMsg])
+        XCTAssertEqual(viewModel.messages.count, 1)
+        XCTAssertNil(viewModel.messages.first?.sequence)
+
+        // Historical message returned from Postgres with sequence 1 and official server UUID
+        mockClient.historyToReturn = [
+            GliaMessage(
+                id: "d97f26d7-83eb-4608-8e6f-777e5d8a816a",
+                role: .user,
+                content: "Hello, who are you?",
+                sequence: 1,
+                insertedAt: Date()
+            )
+        ]
+
+        viewModel.connect()
+        try await waitUntil { viewModel.messages.first?.sequence == 1 }
+
+        // Must still be 1 message (deduplicated!), not duplicated to 2
+        XCTAssertEqual(viewModel.messages.count, 1)
+        XCTAssertEqual(viewModel.messages.first?.id, UUID(uuidString: "d97f26d7-83eb-4608-8e6f-777e5d8a816a"))
+        XCTAssertEqual(viewModel.messages.first?.sequence, 1)
+    }
+
+    func testHistoryErrorTriggersOnErrorCallback() async throws {
+        let mockClient = MockGliaClient()
+        mockClient.shouldFailFetchHistory = true
+
+        let viewModel = GliaChatViewModel(client: mockClient)
+        var capturedError: Error?
+        viewModel.onError = { error in
+            capturedError = error
+        }
+
+        viewModel.connect()
+        try await waitUntil { capturedError != nil }
+
+        XCTAssertNotNil(capturedError)
     }
 }
 #endif

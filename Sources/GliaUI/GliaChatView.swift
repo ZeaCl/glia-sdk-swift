@@ -53,6 +53,30 @@ public struct GliaChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
+                        if viewModel.hasMoreMessages {
+                            HStack {
+                                Spacer()
+                                if viewModel.isLoadingHistory {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Button(action: {
+                                        Task {
+                                            await viewModel.fetchOlderMessages()
+                                        }
+                                    }) {
+                                        Text("Load earlier messages")
+                                            .font(.caption.bold())
+                                            .foregroundColor(theme.primaryColor)
+                                            .frame(minHeight: 44)
+                                            .contentShape(Rectangle())
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                        }
+
                         if viewModel.messages.isEmpty && !viewModel.isStreaming {
                             welcomeView
                         }
@@ -70,16 +94,19 @@ public struct GliaChatView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
-                .onChange(of: viewModel.messages.count) { _ in
-                    if let last = viewModel.messages.last {
+                .onChange(of: viewModel.messages.last?.id) { lastId in
+                    if let lastId = lastId, !viewModel.isLoadingHistory {
                         withAnimation {
-                            proxy.scrollTo(last.id, anchor: .bottom)
+                            proxy.scrollTo(lastId, anchor: .bottom)
                         }
                     }
                 }
                 // Auto-scroll during continuous streaming without animations to prevent saturating the Main Thread
                 .onChange(of: viewModel.currentText) { _ in
                     proxy.scrollTo("live_streaming_indicator", anchor: .bottom)
+                }
+                .refreshable {
+                    await viewModel.fetchOlderMessages()
                 }
             }
 

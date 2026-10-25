@@ -17,6 +17,9 @@ public struct GliaChatView: View {
     private let disconnectOnDisappear: Bool
     private var pendingPrompt: Binding<String?>?
     private let retryButtonTitle: String
+    private let onAttachmentTapped: (() -> Void)?
+    private let onCameraTapped: (() -> Void)?
+    private let onVoiceNoteTapped: (() -> Void)?
 
     public init(
         viewModel: GliaChatViewModel,
@@ -29,7 +32,10 @@ public struct GliaChatView: View {
         tools: [GliaToolDefinition] = [],
         disconnectOnDisappear: Bool = false,
         pendingPrompt: Binding<String?>? = nil,
-        retryButtonTitle: String = "Retry"
+        retryButtonTitle: String = "Retry",
+        onAttachmentTapped: (() -> Void)? = nil,
+        onCameraTapped: (() -> Void)? = nil,
+        onVoiceNoteTapped: (() -> Void)? = nil
     ) {
         self.viewModel = viewModel
         self.title = title
@@ -42,6 +48,9 @@ public struct GliaChatView: View {
         self.disconnectOnDisappear = disconnectOnDisappear
         self.pendingPrompt = pendingPrompt
         self.retryButtonTitle = retryButtonTitle
+        self.onAttachmentTapped = onAttachmentTapped
+        self.onCameraTapped = onCameraTapped
+        self.onVoiceNoteTapped = onVoiceNoteTapped
     }
 
     public var body: some View {
@@ -323,34 +332,75 @@ public struct GliaChatView: View {
         .cornerRadius(10)
     }
 
-    private var inputBar: some View {
-        HStack(spacing: 10) {
-            TextField(placeholder, text: $inputText)
-                .focused($isInputFocused)
-                .foregroundColor(theme.textColor)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(theme.surfaceColor)
-                .cornerRadius(20)
-                .onSubmit {
-                    sendAction()
-                }
+    private var isTextEmpty: Bool {
+        inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
-            Button(action: sendAction) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .resizable()
-                    .frame(width: 34, height: 34)
-                    .foregroundColor(
-                        inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? theme.textMutedColor
-                            : theme.primaryColor
-                    )
+    private var inputBar: some View {
+        HStack(spacing: 8) {
+            // [ + ] Button on left (WhatsApp style)
+            Button(action: {
+                onAttachmentTapped?()
+            }) {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(theme.primaryColor)
+                    .frame(width: 36, height: 36)
+                    .background(theme.surfaceContainerHigh)
+                    .clipShape(Circle())
             }
-            .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isStreaming)
+            .accessibilityIdentifier("chatAttachmentButton")
+
+            // [ Escribe un mensaje... ] in center
+            HStack {
+                TextField(placeholder, text: $inputText)
+                    .focused($isInputFocused)
+                    .foregroundColor(theme.textColor)
+                    .onSubmit {
+                        sendAction()
+                    }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(theme.surfaceColor)
+            .cornerRadius(20)
+
+            // [ 📷 ] Camera button
+            Button(action: {
+                onCameraTapped?()
+            }) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(theme.textMutedColor)
+                    .frame(width: 32, height: 32)
+            }
+            .accessibilityIdentifier("chatCameraButton")
+
+            // [ 🎙️ ] Mic button (transforms to send arrow when typing)
+            if isTextEmpty {
+                Button(action: {
+                    onVoiceNoteTapped?()
+                }) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(theme.primaryColor)
+                        .frame(width: 32, height: 32)
+                }
+                .accessibilityIdentifier("chatMicButton")
+            } else {
+                Button(action: sendAction) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                        .foregroundColor(theme.primaryColor)
+                }
+                .disabled(viewModel.isStreaming)
+                .accessibilityIdentifier("chatSendButton")
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(theme.surfaceColor)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(theme.backgroundColor)
     }
 
     private func sendAction() {

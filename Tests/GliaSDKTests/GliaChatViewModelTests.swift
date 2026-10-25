@@ -467,5 +467,20 @@ final class GliaChatViewModelTests: XCTestCase {
 
         XCTAssertNotNil(capturedError)
     }
+
+    func testGliaChatViewInitializesWithWhatsAppOption2Closures() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        let chatView = GliaChatView(
+            viewModel: viewModel,
+            placeholder: "Escribe un mensaje...",
+            onAttachmentTapped: { },
+            onCameraTapped: { },
+            onVoiceNoteTapped: { }
+        )
+
+        XCTAssertNotNil(chatView)
+    }
 }
 #endif

@@ -87,10 +87,12 @@ public final class GliaChatViewModel: ObservableObject {
     @Published public private(set) var errorMessage: String? = nil
     @Published public private(set) var hasMoreMessages: Bool = false
     @Published public private(set) var isLoadingHistory: Bool = false
+    @Published public private(set) var isLimitReached: Bool = false
 
     public static let defaultErrorMessage: String = "We are currently experiencing difficulties and cannot process your request. Please try again in a few moments."
 
     public var onMessagesUpdated: (([GliaChatMessage]) -> Void)?
+    public var onLimitReached: ((_ message: String, _ limitType: String) -> Void)?
     public var errorSanitizer: ((Error) -> String)?
     public var onError: ((Error) -> Void)?
     public let autoLoadHistory: Bool
@@ -311,6 +313,7 @@ public final class GliaChatViewModel: ObservableObject {
         currentTool = nil
         lastExecutedTool = nil
         errorMessage = nil
+        isLimitReached = false
 
         Task { [weak self] in
             guard let self = self else { return }
@@ -342,6 +345,9 @@ public final class GliaChatViewModel: ObservableObject {
 
     private func formatError(_ error: Error) -> String {
         onError?(error)
+        if case GliaError.limitReached(let msg, _) = error {
+            return msg
+        }
         if let custom = errorSanitizer?(error) {
             return custom
         }
@@ -403,6 +409,13 @@ public final class GliaChatViewModel: ObservableObject {
         case .error(let err):
             isStreaming = false
             errorMessage = formatError(GliaError.serverError(err))
+
+        case .limitReached(let msg, let limitType):
+            isStreaming = false
+            isLimitReached = true
+            let err = GliaError.limitReached(message: msg, limitType: limitType)
+            errorMessage = formatError(err)
+            onLimitReached?(msg, limitType)
         }
     }
 }

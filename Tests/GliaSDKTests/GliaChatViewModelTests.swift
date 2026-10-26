@@ -294,6 +294,35 @@ final class GliaChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.errorMessage, "Sanitized stream error: Server error: bad_gateway")
     }
 
+    func testLimitReachedEventTriggersOnLimitReachedCallbackAndPreservesMessage() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        var limitReachedMessage: String?
+        var limitReachedType: String?
+        viewModel.onLimitReached = { message, type in
+            limitReachedMessage = message
+            limitReachedType = type
+        }
+        // Even with a generic errorSanitizer, limitReached should retain its specific message
+        viewModel.errorSanitizer = { _ in
+            "Generic error"
+        }
+
+        viewModel.connect()
+        try await waitUntil { viewModel.isConnected }
+
+        let customLimitMsg = "Has utilizado tus 5 mensajes gratuitos con tu asistente IA. Pásate a NutriSnaps Pro para consultas ilimitadas."
+        mockClient.emit(.limitReached(message: customLimitMsg, limitType: "chat"))
+
+        try await waitUntil { viewModel.isLimitReached }
+
+        XCTAssertTrue(viewModel.isLimitReached)
+        XCTAssertEqual(limitReachedMessage, customLimitMsg)
+        XCTAssertEqual(limitReachedType, "chat")
+        XCTAssertEqual(viewModel.errorMessage, customLimitMsg)
+    }
+
     func testAutoReconnectOnSend() async throws {
         let mockClient = MockGliaClient()
         let viewModel = GliaChatViewModel(client: mockClient)

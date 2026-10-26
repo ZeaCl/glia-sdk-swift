@@ -103,6 +103,12 @@ public struct GliaChatView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        isInputFocused = false
+                    }
+                )
                 .onChange(of: viewModel.messages.last?.id) { lastId in
                     if let lastId = lastId, !viewModel.isLoadingHistory {
                         withAnimation {
@@ -153,8 +159,14 @@ public struct GliaChatView: View {
         }
         .onChange(of: pendingPrompt?.wrappedValue) { newValue in
             if let text = newValue, !text.isEmpty {
+                isInputFocused = false
                 viewModel.send(prompt: text, systemPrompt: systemPrompt, tools: tools)
                 pendingPrompt?.wrappedValue = nil
+            }
+        }
+        .onChange(of: viewModel.isStreaming) { isStreaming in
+            if isStreaming {
+                isInputFocused = false
             }
         }
     }
@@ -195,6 +207,7 @@ public struct GliaChatView: View {
 
                 ForEach(suggestedPrompts, id: \.self) { prompt in
                     Button(action: {
+                        isInputFocused = false
                         viewModel.send(prompt: prompt, systemPrompt: systemPrompt, tools: tools)
                     }) {
                         Text(prompt)
@@ -406,11 +419,13 @@ public struct GliaChatView: View {
     private func sendAction() {
         let text = inputText
         inputText = ""
+        isInputFocused = false
         viewModel.send(prompt: text, systemPrompt: systemPrompt, tools: tools)
     }
 
     private func handlePendingPrompt() {
         if let text = pendingPrompt?.wrappedValue, !text.isEmpty {
+            isInputFocused = false
             viewModel.send(prompt: text, systemPrompt: systemPrompt, tools: tools)
             pendingPrompt?.wrappedValue = nil
         }

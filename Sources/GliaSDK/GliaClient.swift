@@ -663,7 +663,18 @@ public actor GliaClient: GliaClientProtocol {
 
         case "error":
             let msg = frame.payload["message"]?.stringValue ?? "Error desconocido"
-            broadcast(.error(msg))
+            let code = frame.payload["code"]?.stringValue
+            let limitType = frame.payload["limit_type"]?.stringValue ?? "chat"
+            if code == "limit_reached" {
+                broadcast(.limitReached(message: msg, limitType: limitType))
+            } else {
+                broadcast(.error(msg))
+            }
+
+        case "limit_reached":
+            let msg = frame.payload["message"]?.stringValue ?? "Has alcanzado el límite de consultas disponibles."
+            let limitType = frame.payload["limit_type"]?.stringValue ?? "chat"
+            broadcast(.limitReached(message: msg, limitType: limitType))
 
         default:
             break

@@ -9,6 +9,7 @@ public enum GliaStreamEvent: Sendable, Equatable {
     case toolResult(name: String, result: JSONValue)
     case done(fullMessage: String?)
     case error(String)
+    case limitReached(message: String, limitType: String)
 }
 
 /// Typed errors emitted by the Glia SDK
@@ -19,6 +20,7 @@ public enum GliaError: Error, LocalizedError, Sendable, Equatable {
     case notConnected
     case connectionClosed(String)
     case serverError(String)
+    case limitReached(message: String, limitType: String)
 
     public var errorDescription: String? {
         switch self {
@@ -34,6 +36,8 @@ public enum GliaError: Error, LocalizedError, Sendable, Equatable {
             return "Connection closed: \(reason)"
         case .serverError(let msg):
             return "Server error: \(msg)"
+        case .limitReached(let msg, _):
+            return msg
         }
     }
 }

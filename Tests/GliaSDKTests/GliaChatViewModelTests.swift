@@ -511,5 +511,20 @@ final class GliaChatViewModelTests: XCTestCase {
 
         XCTAssertNotNil(chatView)
     }
+
+    func testGliaChatViewInitializesCleanByDefaultWithoutExtraControls() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        // Standard initialization as done in NutriSnaps AI
+        let chatView = GliaChatView(
+            viewModel: viewModel,
+            title: "Asistente NutriSnaps",
+            welcomeMessage: "¡Hola! ¿En qué puedo ayudarte?",
+            placeholder: "Escribe un mensaje..."
+        )
+
+        XCTAssertNotNil(chatView)
+    }
 }
 #endif

@@ -371,7 +371,9 @@ public struct GliaChatView: View {
                         .frame(width: 38, height: 38)
                         .background(theme.surfaceContainerHigh)
                         .clipShape(Circle())
+                        .contentShape(Circle())
                 }
+                .accessibilityLabel("Adjuntar archivo")
                 .accessibilityIdentifier("chatAttachmentButton")
                 .padding(.bottom, 2)
             }
@@ -396,7 +398,9 @@ public struct GliaChatView: View {
                             .font(.system(size: 18))
                             .foregroundColor(theme.textMutedColor)
                             .frame(width: 34, height: 34)
+                            .contentShape(Rectangle())
                     }
+                    .accessibilityLabel("Cámara")
                     .accessibilityIdentifier("chatCameraButton")
                     .padding(.trailing, 6)
                     .padding(.bottom, 6)
@@ -420,7 +424,9 @@ public struct GliaChatView: View {
                         .frame(width: 38, height: 38)
                         .background(theme.surfaceContainerHigh)
                         .clipShape(Circle())
+                        .contentShape(Circle())
                 }
+                .accessibilityLabel("Mensaje de voz")
                 .accessibilityIdentifier("chatMicButton")
                 .padding(.bottom, 2)
             } else {
@@ -429,8 +435,11 @@ public struct GliaChatView: View {
                         .resizable()
                         .frame(width: 36, height: 36)
                         .foregroundColor(isTextEmpty || viewModel.isStreaming ? theme.textMutedColor.opacity(0.35) : theme.primaryColor)
+                        .contentShape(Circle())
                 }
                 .disabled(isTextEmpty || viewModel.isStreaming)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .accessibilityLabel("Enviar mensaje")
                 .accessibilityIdentifier("chatSendButton")
                 .padding(.bottom, 2)
             }
@@ -441,7 +450,8 @@ public struct GliaChatView: View {
     }
 
     private func sendAction() {
-        let text = inputText
+        guard !isTextEmpty, !viewModel.isStreaming else { return }
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         inputText = ""
         isInputFocused = false
         viewModel.send(prompt: text, systemPrompt: systemPrompt, tools: tools)

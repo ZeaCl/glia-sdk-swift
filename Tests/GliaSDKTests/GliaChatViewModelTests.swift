@@ -525,6 +525,15 @@ final class GliaChatViewModelTests: XCTestCase {
         )
 
         XCTAssertNotNil(chatView)
+
+        let mirror = Mirror(reflecting: chatView)
+        let showAttachment = mirror.children.first { $0.label == "showAttachmentButton" }?.value as? Bool
+        let showCamera = mirror.children.first { $0.label == "showCameraButton" }?.value as? Bool
+        let showVoice = mirror.children.first { $0.label == "showVoiceButton" }?.value as? Bool
+
+        XCTAssertEqual(showAttachment, false)
+        XCTAssertEqual(showCamera, false)
+        XCTAssertEqual(showVoice, false)
     }
 }
 #endif

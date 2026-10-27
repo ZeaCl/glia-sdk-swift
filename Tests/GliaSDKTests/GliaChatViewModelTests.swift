@@ -536,6 +536,24 @@ final class GliaChatViewModelTests: XCTestCase {
         XCTAssertEqual(showVoice, false)
     }
 
+    func testDisconnectionDuringStreamingResetsIsStreamingAndSetsError() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        viewModel.connect()
+        try await waitUntil { viewModel.isConnected }
+
+        viewModel.send(prompt: "¿Cómo estás?")
+        XCTAssertTrue(viewModel.isStreaming)
+
+        // Network disconnection during streaming
+        mockClient.emit(.status("disconnected"))
+        try await waitUntil { !viewModel.isConnected }
+
+        XCTAssertFalse(viewModel.isStreaming, "isStreaming must be released so the chat is not blocked")
+        XCTAssertNotNil(viewModel.errorMessage, "Must alert that the stream was interrupted")
+    }
+
     func testIdleDisconnectionDoesNotTriggerErrorMessageAndReconnectClearsIt() async throws {
         let mockClient = MockGliaClient()
         let viewModel = GliaChatViewModel(client: mockClient)

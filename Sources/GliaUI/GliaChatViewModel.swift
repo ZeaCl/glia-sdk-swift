@@ -373,6 +373,10 @@ public final class GliaChatViewModel: ObservableObject {
                 currentTool = nil
             } else if status == "disconnected" {
                 self.isConnected = false
+                if self.isStreaming {
+                    self.isStreaming = false
+                    self.errorMessage = formatError(GliaError.connectionClosed("Connection lost while streaming"))
+                }
             } else if status == "connected" {
                 self.isConnected = true
                 self.errorMessage = nil

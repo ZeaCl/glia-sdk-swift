@@ -371,6 +371,11 @@ public final class GliaChatViewModel: ObservableObject {
         case .status(let status):
             if status == "idle" && !isStreaming {
                 currentTool = nil
+            } else if status == "disconnected" {
+                self.isConnected = false
+            } else if status == "connected" {
+                self.isConnected = true
+                self.errorMessage = nil
             }
 
         case .thinkingDelta(let delta):

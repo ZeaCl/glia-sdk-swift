@@ -317,6 +317,7 @@ public actor GliaClient: GliaClientProtocol {
         }
 
         self.isJoinedInternal = true
+        broadcast(.status("connected"))
         await flushBufferedTelemetry()
     }
 
@@ -576,7 +577,12 @@ public actor GliaClient: GliaClientProtocol {
 
     private func handleUnexpectedDisconnection(error: Error) {
         cancelInternalConnection()
-        broadcast(.error("WebSocket error: \(error.localizedDescription)"))
+        let hadPending = !pendingReplies.isEmpty
+        if hadPending {
+            broadcast(.error("WebSocket error: \(error.localizedDescription)"))
+        } else {
+            broadcast(.status("disconnected"))
+        }
 
         // Cancel pending continuations if socket dropped
         for reply in pendingReplies.values {
@@ -823,6 +829,10 @@ public actor GliaClient: GliaClientProtocol {
         if isConnectedInternal && isJoinedInternal {
             startHeartbeat()
             await flushBufferedTelemetry()
+        } else if !isVoluntaryDisconnect {
+            // Silently reconnect when returning to foreground if connection dropped while in background
+            reconnectAttempts = 0
+            try? await self.connect()
         }
     }
 

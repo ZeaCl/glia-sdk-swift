@@ -535,5 +535,32 @@ final class GliaChatViewModelTests: XCTestCase {
         XCTAssertEqual(showCamera, false)
         XCTAssertEqual(showVoice, false)
     }
+
+    func testIdleDisconnectionDoesNotTriggerErrorMessageAndReconnectClearsIt() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        viewModel.errorSanitizer = { _ in
+            "Estamos con problemas y en estos momentos no podemos atender su solicitud."
+        }
+
+        viewModel.connect()
+        try await waitUntil { viewModel.isConnected }
+
+        // Simulate idle disconnection (e.g. phone went to sleep, socket closed)
+        mockClient.emit(.status("disconnected"))
+        try await waitUntil { !viewModel.isConnected }
+
+        // Must NOT show error banner when idle disconnection occurs
+        XCTAssertFalse(viewModel.isConnected)
+        XCTAssertNil(viewModel.errorMessage)
+
+        // Simulate successful reconnection (e.g. returning to foreground)
+        mockClient.emit(.status("connected"))
+        try await waitUntil { viewModel.isConnected }
+
+        XCTAssertTrue(viewModel.isConnected)
+        XCTAssertNil(viewModel.errorMessage)
+    }
 }
 #endif

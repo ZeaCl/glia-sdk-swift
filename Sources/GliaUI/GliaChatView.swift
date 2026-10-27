@@ -375,7 +375,7 @@ public struct GliaChatView: View {
                 }
                 .accessibilityLabel("Adjuntar archivo")
                 .accessibilityIdentifier("chatAttachmentButton")
-                .padding(.bottom, 2)
+                .padding(.bottom, 7)
             }
 
             // [ Escribe un mensaje... ] Gemini-style spacious multiline card
@@ -384,10 +384,10 @@ public struct GliaChatView: View {
                     .lineLimit(1...5)
                     .focused($isInputFocused)
                     .foregroundColor(theme.textColor)
-                    .frame(minHeight: 32)
-                    .padding(.vertical, 8)
-                    .padding(.leading, 14)
-                    .padding(.trailing, showCameraButton ? 0 : 8)
+                    .frame(minHeight: 36)
+                    .padding(.vertical, 12)
+                    .padding(.leading, 16)
+                    .padding(.trailing, showCameraButton ? 0 : 10)
 
                 // [ 📷 ] Camera button (Only rendered if enabled)
                 if showCameraButton {
@@ -397,19 +397,20 @@ public struct GliaChatView: View {
                         Image(systemName: "camera.fill")
                             .font(.system(size: 18))
                             .foregroundColor(theme.textMutedColor)
-                            .frame(width: 34, height: 34)
+                            .frame(width: 36, height: 36)
                             .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Cámara")
                     .accessibilityIdentifier("chatCameraButton")
-                    .padding(.trailing, 6)
-                    .padding(.bottom, 6)
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 8)
                 }
             }
+            .frame(minHeight: 52)
             .background(theme.surfaceColor)
-            .cornerRadius(22)
+            .cornerRadius(26)
             .overlay(
-                RoundedRectangle(cornerRadius: 22)
+                RoundedRectangle(cornerRadius: 26)
                     .stroke(isInputFocused ? theme.primaryColor.opacity(0.4) : Color.clear, lineWidth: 1.5)
             )
 
@@ -428,12 +429,12 @@ public struct GliaChatView: View {
                 }
                 .accessibilityLabel("Mensaje de voz")
                 .accessibilityIdentifier("chatMicButton")
-                .padding(.bottom, 2)
+                .padding(.bottom, 7)
             } else {
                 Button(action: sendAction) {
                     Image(systemName: "arrow.up.circle.fill")
                         .resizable()
-                        .frame(width: 36, height: 36)
+                        .frame(width: 38, height: 38)
                         .foregroundColor(isTextEmpty || viewModel.isStreaming ? theme.textMutedColor.opacity(0.35) : theme.primaryColor)
                         .contentShape(Circle())
                 }
@@ -441,7 +442,7 @@ public struct GliaChatView: View {
                 .keyboardShortcut(.return, modifiers: [.command])
                 .accessibilityLabel("Enviar mensaje")
                 .accessibilityIdentifier("chatSendButton")
-                .padding(.bottom, 2)
+                .padding(.bottom, 7)
             }
         }
         .padding(.horizontal, 12)

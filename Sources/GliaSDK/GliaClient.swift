@@ -115,6 +115,7 @@ public actor GliaClient: GliaClientProtocol {
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempts: Int = 0
+    private var isRunActive: Bool = false
 
     private var continuations: [UUID: AsyncStream<GliaStreamEvent>.Continuation] = [:]
     private var pendingReplies: [String: CheckedContinuation<[String: JSONValue], Error>] = [:]
@@ -317,6 +318,7 @@ public actor GliaClient: GliaClientProtocol {
         }
 
         self.isJoinedInternal = true
+        broadcast(.status("connected"))
         await flushBufferedTelemetry()
     }
 
@@ -400,6 +402,7 @@ public actor GliaClient: GliaClientProtocol {
 
         let text = try frame.serialize()
         try await conn.send(.string(text))
+        isRunActive = true
     }
 
     // MARK: - Conversation History
@@ -576,7 +579,15 @@ public actor GliaClient: GliaClientProtocol {
 
     private func handleUnexpectedDisconnection(error: Error) {
         cancelInternalConnection()
-        broadcast(.error("WebSocket error: \(error.localizedDescription)"))
+        // A run is "pending" if we have in-flight RPC replies OR the agent is actively
+        // streaming a response (fire-and-forget "run" events are not tracked in pendingReplies).
+        let hadPending = !pendingReplies.isEmpty || isRunActive
+        if hadPending {
+            broadcast(.error("WebSocket error: \(error.localizedDescription)"))
+        } else {
+            broadcast(.status("disconnected"))
+        }
+        isRunActive = false
 
         // Cancel pending continuations if socket dropped
         for reply in pendingReplies.values {
@@ -632,6 +643,9 @@ public actor GliaClient: GliaClientProtocol {
 
         case "status":
             if let status = frame.payload["status"]?.stringValue {
+                if status == "idle" {
+                    isRunActive = false
+                }
                 broadcast(.status(status))
             }
 
@@ -659,6 +673,7 @@ public actor GliaClient: GliaClientProtocol {
 
         case "done":
             let fullMsg = frame.payload["text"]?.stringValue ?? frame.payload["full_message"]?.stringValue
+            isRunActive = false
             broadcast(.done(fullMessage: fullMsg))
 
         case "error":
@@ -666,14 +681,17 @@ public actor GliaClient: GliaClientProtocol {
             let code = frame.payload["code"]?.stringValue
             let limitType = frame.payload["limit_type"]?.stringValue ?? "chat"
             if code == "limit_reached" {
+                isRunActive = false
                 broadcast(.limitReached(message: msg, limitType: limitType))
             } else {
+                isRunActive = false
                 broadcast(.error(msg))
             }
 
         case "limit_reached":
             let msg = frame.payload["message"]?.stringValue ?? "Has alcanzado el límite de consultas disponibles."
             let limitType = frame.payload["limit_type"]?.stringValue ?? "chat"
+            isRunActive = false
             broadcast(.limitReached(message: msg, limitType: limitType))
 
         default:
@@ -823,6 +841,10 @@ public actor GliaClient: GliaClientProtocol {
         if isConnectedInternal && isJoinedInternal {
             startHeartbeat()
             await flushBufferedTelemetry()
+        } else if !isVoluntaryDisconnect {
+            // Silently reconnect when returning to foreground if connection dropped while in background
+            reconnectAttempts = 0
+            try? await self.connect()
         }
     }
 

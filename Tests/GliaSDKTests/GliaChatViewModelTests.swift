@@ -511,5 +511,29 @@ final class GliaChatViewModelTests: XCTestCase {
 
         XCTAssertNotNil(chatView)
     }
+
+    func testGliaChatViewInitializesCleanByDefaultWithoutExtraControls() async throws {
+        let mockClient = MockGliaClient()
+        let viewModel = GliaChatViewModel(client: mockClient)
+
+        // Standard initialization as done in NutriSnaps AI
+        let chatView = GliaChatView(
+            viewModel: viewModel,
+            title: "Asistente NutriSnaps",
+            welcomeMessage: "¡Hola! ¿En qué puedo ayudarte?",
+            placeholder: "Escribe un mensaje..."
+        )
+
+        XCTAssertNotNil(chatView)
+
+        let mirror = Mirror(reflecting: chatView)
+        let showAttachment = mirror.children.first { $0.label == "showAttachmentButton" }?.value as? Bool
+        let showCamera = mirror.children.first { $0.label == "showCameraButton" }?.value as? Bool
+        let showVoice = mirror.children.first { $0.label == "showVoiceButton" }?.value as? Bool
+
+        XCTAssertEqual(showAttachment, false)
+        XCTAssertEqual(showCamera, false)
+        XCTAssertEqual(showVoice, false)
+    }
 }
 #endif

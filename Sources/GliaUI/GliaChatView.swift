@@ -17,6 +17,9 @@ public struct GliaChatView: View {
     private let disconnectOnDisappear: Bool
     private var pendingPrompt: Binding<String?>?
     private let retryButtonTitle: String
+    private let showAttachmentButton: Bool
+    private let showCameraButton: Bool
+    private let showVoiceButton: Bool
     private let onAttachmentTapped: (() -> Void)?
     private let onCameraTapped: (() -> Void)?
     private let onVoiceNoteTapped: (() -> Void)?
@@ -33,6 +36,9 @@ public struct GliaChatView: View {
         disconnectOnDisappear: Bool = false,
         pendingPrompt: Binding<String?>? = nil,
         retryButtonTitle: String = "Retry",
+        showAttachmentButton: Bool? = nil,
+        showCameraButton: Bool? = nil,
+        showVoiceButton: Bool? = nil,
         onAttachmentTapped: (() -> Void)? = nil,
         onCameraTapped: (() -> Void)? = nil,
         onVoiceNoteTapped: (() -> Void)? = nil
@@ -48,6 +54,9 @@ public struct GliaChatView: View {
         self.disconnectOnDisappear = disconnectOnDisappear
         self.pendingPrompt = pendingPrompt
         self.retryButtonTitle = retryButtonTitle
+        self.showAttachmentButton = showAttachmentButton ?? (onAttachmentTapped != nil)
+        self.showCameraButton = showCameraButton ?? (onCameraTapped != nil)
+        self.showVoiceButton = showVoiceButton ?? (onVoiceNoteTapped != nil)
         self.onAttachmentTapped = onAttachmentTapped
         self.onCameraTapped = onCameraTapped
         self.onVoiceNoteTapped = onVoiceNoteTapped
@@ -350,74 +359,99 @@ public struct GliaChatView: View {
     }
 
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            // [ + ] Button on left (WhatsApp style)
-            Button(action: {
-                onAttachmentTapped?()
-            }) {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(theme.primaryColor)
-                    .frame(width: 36, height: 36)
-                    .background(theme.surfaceContainerHigh)
-                    .clipShape(Circle())
+        HStack(alignment: .bottom, spacing: 8) {
+            // [ + ] Button on left (Only rendered if enabled)
+            if showAttachmentButton {
+                Button(action: {
+                    onAttachmentTapped?()
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(theme.primaryColor)
+                        .frame(width: 38, height: 38)
+                        .background(theme.surfaceContainerHigh)
+                        .clipShape(Circle())
+                        .contentShape(Circle())
+                }
+                .accessibilityLabel("Adjuntar archivo")
+                .accessibilityIdentifier("chatAttachmentButton")
+                .padding(.bottom, 2)
             }
-            .accessibilityIdentifier("chatAttachmentButton")
 
-            // [ Escribe un mensaje... ] in center
-            HStack {
-                TextField(placeholder, text: $inputText)
+            // [ Escribe un mensaje... ] Gemini-style spacious multiline card
+            HStack(alignment: .bottom, spacing: 6) {
+                TextField(placeholder, text: $inputText, axis: .vertical)
+                    .lineLimit(1...5)
                     .focused($isInputFocused)
                     .foregroundColor(theme.textColor)
-                    .onSubmit {
-                        sendAction()
+                    .frame(minHeight: 32)
+                    .padding(.vertical, 8)
+                    .padding(.leading, 14)
+                    .padding(.trailing, showCameraButton ? 0 : 8)
+
+                // [ 📷 ] Camera button (Only rendered if enabled)
+                if showCameraButton {
+                    Button(action: {
+                        onCameraTapped?()
+                    }) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(theme.textMutedColor)
+                            .frame(width: 34, height: 34)
+                            .contentShape(Rectangle())
                     }
+                    .accessibilityLabel("Cámara")
+                    .accessibilityIdentifier("chatCameraButton")
+                    .padding(.trailing, 6)
+                    .padding(.bottom, 6)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
             .background(theme.surfaceColor)
-            .cornerRadius(20)
+            .cornerRadius(22)
+            .overlay(
+                RoundedRectangle(cornerRadius: 22)
+                    .stroke(isInputFocused ? theme.primaryColor.opacity(0.4) : Color.clear, lineWidth: 1.5)
+            )
 
-            // [ 📷 ] Camera button
-            Button(action: {
-                onCameraTapped?()
-            }) {
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(theme.textMutedColor)
-                    .frame(width: 32, height: 32)
-            }
-            .accessibilityIdentifier("chatCameraButton")
-
-            // [ 🎙️ ] Mic button (transforms to send arrow when typing)
-            if isTextEmpty {
+            // Right action button: Voice Note (if enabled and empty) or Send Arrow
+            if isTextEmpty && showVoiceButton {
                 Button(action: {
                     onVoiceNoteTapped?()
                 }) {
                     Image(systemName: "mic.fill")
                         .font(.system(size: 18))
                         .foregroundColor(theme.primaryColor)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 38, height: 38)
+                        .background(theme.surfaceContainerHigh)
+                        .clipShape(Circle())
+                        .contentShape(Circle())
                 }
+                .accessibilityLabel("Mensaje de voz")
                 .accessibilityIdentifier("chatMicButton")
+                .padding(.bottom, 2)
             } else {
                 Button(action: sendAction) {
                     Image(systemName: "arrow.up.circle.fill")
                         .resizable()
-                        .frame(width: 32, height: 32)
-                        .foregroundColor(theme.primaryColor)
+                        .frame(width: 36, height: 36)
+                        .foregroundColor(isTextEmpty || viewModel.isStreaming ? theme.textMutedColor.opacity(0.35) : theme.primaryColor)
+                        .contentShape(Circle())
                 }
-                .disabled(viewModel.isStreaming)
+                .disabled(isTextEmpty || viewModel.isStreaming)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .accessibilityLabel("Enviar mensaje")
                 .accessibilityIdentifier("chatSendButton")
+                .padding(.bottom, 2)
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(theme.backgroundColor)
     }
 
     private func sendAction() {
-        let text = inputText
+        guard !isTextEmpty, !viewModel.isStreaming else { return }
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         inputText = ""
         isInputFocused = false
         viewModel.send(prompt: text, systemPrompt: systemPrompt, tools: tools)
